@@ -1,0 +1,28 @@
+{$APP_DOMAIN} {
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        X-Frame-Options DENY
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    }
+    handle /api/planner {
+        request_body {
+            max_size 4000000
+        }
+        reverse_proxy api:8000
+    }
+    handle /api/* {
+        request_body {
+            max_size 32KB
+        }
+        reverse_proxy api:8000
+    }
+    handle {
+        root * /srv
+        header Cache-Control "no-cache"
+        try_files {path} /index.html
+        file_server
+    }
+}

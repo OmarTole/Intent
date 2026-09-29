@@ -1,0 +1,7 @@
+.d-table-top-scroll{width:100%;overflow-x:auto;overflow-y:hidden;height:17px;background:#f6f4ec;scrollbar-color:#c5b985 #f0ece0;scrollbar-width:thin}
+.d-table-top-scroll[hidden]{display:none}
+.d-table-top-scroll>div{height:1px}
+.d-table-top-scroll::-webkit-scrollbar{height:11px}
+.d-table-top-scroll::-webkit-scrollbar-track{background:#f0ece0}
+.d-table-top-scroll::-webkit-scrollbar-thumb{background:#c5b985;border:2px solid #f0ece0;border-radius:6px}
+.d-table-top-scroll:focus-visible{outline:2px solid #c79a22;outline-offset:-2px}

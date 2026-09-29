@@ -1,0 +1,10 @@
+__pycache__
+.pytest_cache
+*.db
+tests
+.env
+.env.*
+*.db-*
+*.sqlite*
+*.pem
+*.key

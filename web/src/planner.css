@@ -1,0 +1,69 @@
+.planner-tools { display:flex; align-items:center; flex-wrap:wrap; gap:18px; margin-bottom:24px; }
+.planner-tools label { margin-left:auto; font-size:12px; color:var(--muted); }
+.planner-tools input { display:block; margin-top:5px; width:180px; padding:7px; background:transparent; color:inherit; border:1px solid var(--border); border-radius:6px; }
+.schedule-assistant { padding:18px 20px; margin-bottom:28px; }
+.schedule-assistant summary,.archive-list summary { cursor:pointer; font-weight:500; min-height:28px; }
+.schedule-assistant p { margin-top:14px; }
+.schedule-assistant textarea { width:100%; min-height:90px; padding:12px; margin:0 0 12px; background:#f9faf6; border:1px solid var(--border); border-radius:8px; color:inherit; }
+.schedule-assistant form>.text-button { margin-left:16px; }
+.schedule-proposal>div { padding:18px 0; border-top:1px solid var(--border); }
+.schedule-proposal .text-button { margin-right:20px; }
+.program-text { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; line-height:1.75; }
+.conflict-note { color:#806324; font-size:13px; }
+.calendar-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; }
+.calendar-controls input { padding:9px; background:transparent; border:1px solid var(--border); border-radius:7px; color:inherit; }
+.agenda>section { margin-bottom:28px; }
+.agenda h2 { font-size:14px; color:var(--muted); margin-bottom:12px; text-transform:capitalize; }
+.agenda-row { display:flex; align-items:center; gap:14px; padding:16px; margin-bottom:8px; border:1px solid var(--border); border-radius:10px; background:#f6f7f3; }
+.agenda-time { width:90px; flex-shrink:0; font-size:13px; }
+.agenda-time small { display:block; color:var(--muted); margin-top:4px; font-size:11px; }
+.agenda-title { flex:1; min-width:0; text-align:left; padding:0; background:none; border:0; color:inherit; }
+.agenda-title strong { display:block; font-weight:550; overflow-wrap:anywhere; }
+.agenda-title small { display:block; color:var(--muted); font-size:12px; margin-top:5px; }
+.focus-button { display:grid; place-items:center; min-height:40px; min-width:40px; color:#657177; background:transparent; border:0; border-radius:7px; }
+.focus-button.on { background:#eee2ad; color:#746025; }
+.focused { box-shadow:inset 3px 0 #c8ad50; }
+.day-state { border:1px solid var(--border); border-radius:7px; padding:9px; min-height:40px; font-size:12px; color:#37473e; }
+.day-state.pending,.tracker-cell.pending { background:#edf0eb; color:#68766e; }
+.day-state.missed,.tracker-cell.missed { background:#fff; }
+.day-state.done,.tracker-cell.done { background:#9dc6a5; }
+.day-state.partial,.tracker-cell.partial { background:#d5e6ce; }
+.day-state.rest,.tracker-cell.rest { background:#d9ddda; color:#626d66; }
+.agenda-empty { margin:0; padding:16px 0; }
+.tracker-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--muted); }
+.tracker-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:8px; }
+.tracker { border-collapse:collapse; background:#f6f7f3; font-size:12px; }
+.tracker caption { text-align:left; padding:12px; }
+.tracker th,.tracker td { border:1px solid #cdd5cc; padding:0; text-align:center; }
+.tracker thead th { padding:9px 3px; font-weight:500; }
+.tracker th:first-child { position:sticky; left:0; z-index:1; background:#e7eae5; min-width:170px; max-width:220px; text-align:left; padding:8px 12px; }
+.tracker th button { background:none; border:0; text-align:left; color:inherit; overflow-wrap:anywhere; }
+.tracker-cell { width:34px; height:36px; border:0; border-radius:0; font-size:13px; }
+.tracker-cell:disabled { opacity:1; }
+.archive-list { margin-top:28px; color:var(--muted); }
+.archive-list>div { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); padding:8px 0; }
+.archive-list span { font-size:12px; }
+.form-pair { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.weekday-picker { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+.weekday-picker label { display:flex; align-items:center; gap:5px; padding:8px; border:1px solid var(--border); border-radius:6px; }
+.planner-dialog .weekday-picker input,.planner-dialog .focus-check input { width:18px; height:18px; margin:0; }
+.planner-dialog .focus-check { display:flex; align-items:center; gap:10px; margin-bottom:24px; }
+.manage-activity { margin-top:20px; padding-top:16px; border-top:1px solid var(--border); }
+.manage-activity>.text-button { margin-right:20px; }
+.manage-activity [role=alert] { padding:14px; background:#eee1dc; margin-top:14px; border-radius:8px; }
+.manage-activity [role=alert] button { margin-right:8px; }
+@media(max-width:760px) {
+  .planner-tools { gap:10px 18px; }
+  .planner-tools label { margin-left:0; }
+  .agenda-row { gap:9px; padding:12px; flex-wrap:wrap; }
+  .agenda-time { width:65px; font-size:12px; }
+  .agenda-title { flex-basis:calc(100% - 80px); }
+  .focus-button { margin-left:74px; }
+  .day-state { flex:1; }
+  .form-pair { grid-template-columns:1fr; gap:0; }
+  .sidebar { padding-left:6px; padding-right:6px; }
+  .sidebar nav { gap:2px; }
+  .nav-item { flex-direction:column; gap:4px; font-size:10px; padding:6px 2px; }
+  .nav-item svg { width:17px; height:17px; }
+  .planner-dialog textarea,.schedule-assistant textarea { font-size:16px; }
+}
