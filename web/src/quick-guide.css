@@ -1,0 +1,11 @@
+.d-guide-content { padding: 20px 25px; }
+.d-guide-content>p:first-child { color: var(--muted); font-size: 13px; }
+.d-guide-content ol { margin: 0 0 18px; padding-left: 21px; }
+.d-guide-content li { padding-left: 5px; margin-bottom: 15px; line-height: 1.6; font-size: 13px; }
+.d-guide-content li::marker { color: #a68628; font-weight: 600; }
+.d-guide-content strong { display: block; }
+.d-guide-content>.d-primary { width: 100%; }
+@media(max-width:760px) {
+  .d-guide-content { padding: 15px 18px; }
+  .d-guide-content li { font-size: 12px; margin-bottom: 12px; }
+}
