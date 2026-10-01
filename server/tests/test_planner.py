@@ -18,6 +18,17 @@ def state(**changes):
     return {"version": 0, "timezone": "Asia/Qyzylorda", "activities": [activity()], "marks": [], **changes}
 
 
+@pytest.mark.parametrize('status', ['skipped', 'missed'])
+def test_manual_skip_saved_and_loaded(clients, status):
+    alice, _, _ = clients
+    section_id = str(uuid4())
+    payload = state(sections=[{'id': section_id, 'title': 'Work', 'group': 'Required'}],
+                    sectionMarks=[{'sectionId': section_id, 'date': '2026-09-29', 'status': status}])
+    response = alice.put('/api/planner', json=payload)
+    assert response.status_code == 200, response.text
+    assert alice.get('/api/planner').json()['sectionMarks'][0]['status'] == status
+
+
 def test_calendar_ownership_versions_and_marks(clients):
     alice, bob, _ = clients
     payload = state()

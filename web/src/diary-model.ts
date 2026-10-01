@@ -1,6 +1,6 @@
 import { emptyPlanner, occurs, type Activity, type Mark, type PlannerData } from './planner-model'
 export type Section = { id: string; title: string; group: string; position?: number }
-export type CellStatus = 'empty' | 'pending' | 'partial' | 'done'
+export type CellStatus = 'empty' | 'pending' | 'partial' | 'done' | 'skipped' | 'missed'
 export type SectionMark = { sectionId: string; date: string; status: CellStatus }
 export type Diary = PlannerData & { sections: Section[]; sectionMarks: SectionMark[]; groups?: string[] | null }
 export const groups = ['Обязательное', 'Хочу внедрить', 'На выбор', 'Без вредных привычек']
@@ -9,7 +9,7 @@ export function orderedSections(data: Diary): Section[] {
   const names = groupNames(data)
   return [...data.sections].sort((a, b) => names.indexOf(a.group) - names.indexOf(b.group) || (a.position || 0) - (b.position || 0))
 }
-export const labels: Record<CellStatus, string> = { empty: 'Без отметки', pending: 'Запланировано', partial: 'Частично', done: 'Выполнено' }
+export const labels: Record<CellStatus, string> = { empty: 'Без отметки', pending: 'Запланировано', partial: 'Частично', done: 'Выполнено', skipped: 'Намеренный пропуск', missed: 'Пропуск' }
 export function emptyDiary(): Diary { return { ...emptyPlanner(), sections: [], sectionMarks: [] } }
 export function normalize(data: PlannerData & Partial<Diary>): Diary { return { ...data, sections: data.sections || [], sectionMarks: data.sectionMarks || [] } }
 export function dayMark(data: Diary, activity: Activity, day: string): Mark {

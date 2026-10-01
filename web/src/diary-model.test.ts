@@ -7,6 +7,17 @@ function fixture(): Diary {
   return { ...emptyDiary(), sections: [{ id: 'work', title: 'Работа', group: 'Обязательное' }], activities: [1, 2].map(i => ({ ...blankActivity('2026-09-29'), id: String(i), sectionId: 'work' })) }
 }
 describe('daily progress', () => {
+  it('uses skip colors only for explicit manual marks and restores automatic progress', () => {
+    const d = fixture()
+    for (const status of ['skipped', 'missed'] as const) {
+      d.sectionMarks = [{ sectionId: 'work', date: '2026-09-29', status }]
+      expect(cellStatus(d, 'work', '2026-09-29')).toBe(status)
+      expect(automaticStatus(d, '2026-09-29', 'work')).toBe('pending')
+      expect(d.marks).toHaveLength(0)
+    }
+    d.sectionMarks = []
+    expect(cellStatus(d, 'work', '2026-09-29')).toBe('pending')
+  })
   it('calculates all three states and honors manual feelings without changing tasks', () => {
     const d = fixture()
     expect(automaticStatus(d, '2026-09-29', 'work')).toBe('pending')

@@ -69,7 +69,7 @@ class Section(StrictModel):
 class SectionMark(StrictModel):
     sectionId: UUID
     date: date
-    status: Literal["pending", "partial", "done", "empty"]
+    status: Literal["pending", "partial", "done", "empty", "skipped", "missed"]
 
 
 class DayMark(StrictModel):
