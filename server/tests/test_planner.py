@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone, timedelta
+import json
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -109,7 +110,10 @@ def test_push_deduplicates_and_unsubscribes_on_logout(clients, monkeypatch):
     deliver_due(now=now, sessions=sessions, sender=lambda **kwargs: sent.append(kwargs))
     deliver_due(now=now, sessions=sessions, sender=lambda **kwargs: sent.append(kwargs))
     assert len(sent) == 1
-    assert 'Тренировка' not in sent[0]['data']
+    notification = json.loads(sent[0]['data'])
+    assert notification['title'] == 'Тренировка'
+    assert ' · ' in notification['body']
+    assert notification['url'].startswith('/?view=today&date=')
     assert alice.post('/api/auth/logout').status_code == 204
     with sessions() as db:
         assert list(db.scalars(select(PushSubscription))) == []

@@ -88,7 +88,7 @@ def register_push(app, current_user):
         from pywebpush import webpush
         try:
             webpush(subscription_info=sub.data,
-                    data=json.dumps({'title': 'Intent · Проверка уведомлений', 'body': 'Уведомления на этом устройстве работают.', 'tag': 'intent-test', 'url': '/'}),
+                    data=json.dumps({'title': 'Уведомления работают', 'body': 'Проверка доставки', 'tag': 'intent-test', 'url': '/'}),
                     vapid_private_key=os.environ['VAPID_PRIVATE_KEY'],
                     vapid_claims={'sub': os.environ['VAPID_SUBJECT']}, timeout=10, ttl=300)
         except Exception as error:
@@ -152,8 +152,7 @@ def deliver_due(now=None, sessions=SessionLocal, sender=None):
                 if db.get(PushDelivery, key):
                     continue
                 try:
-                    # Generic text protects privacy on lock screens and after sign-out.
-                    sender(subscription_info=sub.data, data=json.dumps({"title": "Intent · Напоминание", "body": f"Запланированное дело: {day}, {at}. Нажмите, чтобы открыть день.", "tag": key, "url": f"/?view=today&date={day}"}),
+                    sender(subscription_info=sub.data, data=json.dumps({"title": item.title, "body": f"{day:%d.%m.%Y} · {at}", "tag": key, "url": f"/?view=today&date={day}"}),
                            vapid_private_key=os.environ["VAPID_PRIVATE_KEY"], vapid_claims={"sub": os.getenv("VAPID_SUBJECT", "mailto:owner@localhost")}, timeout=10, ttl=3600)
                     db.add(PushDelivery(id=key))
                     db.commit()
