@@ -33,6 +33,7 @@
 .d-five-days .d-cell { min-width: 0; }
 .d-month-days .d-tracker thead th:not(:first-child) { min-width: 38px; }
 .d-progress-empty { padding: 18px; font-size: 14px; }
+.d-progress-table .d-tracker .d-tracker-edge { width: var(--tracker-edge-space, 0px); min-width: var(--tracker-edge-space, 0px); padding: 0; border: 0; background: var(--table-surface); }
 .d-progress-fullscreen { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); border: 0; margin: 0; max-width: none; max-height: none; width: 100vw; height: 100dvh; background: var(--table-surface, #fffefa); color: inherit; }
 [data-theme=dark] .d-progress-fullscreen { background: #242424; }
 .d-progress-fullscreen .d-progress-table { display: flex; flex-direction: column; height: 100%; border: 0; border-radius: 0; }
