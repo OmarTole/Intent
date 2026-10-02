@@ -111,7 +111,8 @@ def test_push_deduplicates_and_unsubscribes_on_logout(clients, monkeypatch):
     deliver_due(now=now, sessions=sessions, sender=lambda **kwargs: sent.append(kwargs))
     assert len(sent) == 1
     notification = json.loads(sent[0]['data'])
-    assert notification['title'] == 'Тренировка'
+    assert notification['title'] == 'Intent'
+    assert notification['body'].startswith('Тренировка\n')
     assert ' · ' in notification['body']
     assert notification['url'].startswith('/?view=today&date=')
     assert alice.post('/api/auth/logout').status_code == 204
