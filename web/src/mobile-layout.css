@@ -1,0 +1,41 @@
+@media (max-width: 760px) {
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
+    touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  #root, .diary-app, .d-main, .d-content {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+  .d-panel, .d-progress-table, .d-settings, .d-day-list {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .d-table-scroll, .d-table-top-scroll {
+    min-width: 0;
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+  }
+  .d-topbar>span { min-width: 0; overflow: hidden; white-space: nowrap; }
+  .d-topbar-actions { flex-shrink: 0; }
+  .d-heading>div, .d-progress-heading h2, .d-progress-period { min-width: 0; }
+  .d-heading h1 { overflow-wrap: anywhere; }
+  .d-heading>.d-primary { flex-shrink: 0; }
+  .d-progress-period strong { overflow-wrap: anywhere; }
+  .d-progress-period button { flex-shrink: 0; }
+  .d-modal { overflow-x: hidden; overscroll-behavior-x: none; }
+  .d-modal input:not([type=checkbox]), .d-modal select, .d-modal textarea,
+  .d-settings input, .d-settings select, .d-auth input,
+  .d-date-input input, .d-search input, .d-progress-controls>input {
+    font-size: 16px;
+    min-width: 0;
+  }
+  .d-settings-card p, .d-timeline p { overflow-wrap: anywhere; }
+}
