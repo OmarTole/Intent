@@ -17,8 +17,19 @@ from .db import Base, SessionLocal, User, get_db
 from .planner import PlannerData, PlannerState, due_reminders
 from .schemas import StrictModel
 from .security import token_hash
+from .security import RateLimiter
 
 log = logging.getLogger(__name__)
+push_limiter = RateLimiter()
+
+
+def configuration_error():
+    if not os.getenv('VAPID_PRIVATE_KEY') or not os.getenv('VAPID_PUBLIC_KEY'):
+        return 'На сервере не настроены оба ключа VAPID.'
+    subject = os.getenv('VAPID_SUBJECT', '')
+    if not subject or 'localhost' in subject.lower() or not subject.startswith(('mailto:', 'https://')):
+        return 'В Render задайте VAPID_SUBJECT: mailto:ваша_настоящая_почта вместо owner@localhost.'
+    return None
 
 
 class PushSubscription(Base):
@@ -63,7 +74,34 @@ class UnsubscribeData(StrictModel):
 def register_push(app, current_user):
     @app.get("/api/push/config")
     def config(user: User = Depends(current_user)):
-        return {"publicKey": os.getenv("VAPID_PUBLIC_KEY", "") if os.getenv("VAPID_PRIVATE_KEY") else ""}
+        return {"publicKey": os.getenv("VAPID_PUBLIC_KEY", "") if os.getenv("VAPID_PRIVATE_KEY") else "", "error": configuration_error()}
+
+    @app.post('/api/push/test')
+    def test_push(body: UnsubscribeData, user: User = Depends(current_user), db: Session = Depends(get_db)):
+        push_limiter.check('push-test:' + user.id, 3)
+        if error := configuration_error():
+            raise HTTPException(503, error)
+        key = hashlib.sha256(body.endpoint.encode()).hexdigest()
+        sub = db.get(PushSubscription, key)
+        if not sub or sub.user_id != user.id:
+            raise HTTPException(404, 'Сначала включите уведомления на этом устройстве.')
+        from pywebpush import webpush
+        try:
+            webpush(subscription_info=sub.data,
+                    data=json.dumps({'title': 'Intent · Проверка уведомлений', 'body': 'Уведомления на этом устройстве работают.', 'tag': 'intent-test', 'url': '/'}),
+                    vapid_private_key=os.environ['VAPID_PRIVATE_KEY'],
+                    vapid_claims={'sub': os.environ['VAPID_SUBJECT']}, timeout=10, ttl=300)
+        except Exception as error:
+            response = getattr(error, 'response', None)
+            status = response.status_code if response is not None else None
+            if status in (404, 410):
+                db.delete(sub)
+                db.commit()
+                raise HTTPException(410, 'Подписка устарела. Отключите уведомления и включите снова.') from None
+            if status in (401, 403):
+                raise HTTPException(502, 'Сервис телефона отклонил ключи VAPID. Проверьте пару ключей и VAPID_SUBJECT в Render, затем переподключите уведомления.') from None
+            raise HTTPException(502, 'Не удалось отправить уведомление. Попробуйте снова и проверьте настройки VAPID на сервере.') from None
+        return {'accepted': True}
 
     @app.post("/api/push/subscribe", status_code=204)
     def subscribe(body: SubscriptionData, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -115,7 +153,7 @@ def deliver_due(now=None, sessions=SessionLocal, sender=None):
                     continue
                 try:
                     # Generic text protects privacy on lock screens and after sign-out.
-                    sender(subscription_info=sub.data, data=json.dumps({"title": "Intent · Напоминание", "body": "В календаре есть запланированное дело. Откройте «Сегодня».", "tag": key}),
+                    sender(subscription_info=sub.data, data=json.dumps({"title": "Intent · Напоминание", "body": f"Запланированное дело: {day}, {at}. Нажмите, чтобы открыть день.", "tag": key, "url": f"/?view=today&date={day}"}),
                            vapid_private_key=os.environ["VAPID_PRIVATE_KEY"], vapid_claims={"sub": os.getenv("VAPID_SUBJECT", "mailto:owner@localhost")}, timeout=10, ttl=3600)
                     db.add(PushDelivery(id=key))
                     db.commit()
@@ -125,7 +163,7 @@ def deliver_due(now=None, sessions=SessionLocal, sender=None):
                         db.delete(sub)
                         db.commit()
                         break
-                    log.warning("Push delivery failed; will retry (%s)", type(error).__name__)
+                    log.warning("Push delivery failed; will retry (%s, HTTP %s)", type(error).__name__, response.status_code if response is not None else 'unknown')
         db.execute(delete(PushDelivery).where(PushDelivery.sent_at < now.timestamp() - 30 * 86400))
         db.commit()
 

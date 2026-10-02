@@ -124,6 +124,22 @@ def test_push_rejects_private_endpoints(clients, monkeypatch):
         assert response.status_code == 422
 
 
+def test_push_test_validates_config_and_device_owner(clients, monkeypatch):
+    alice, bob, _ = clients
+    monkeypatch.setenv('VAPID_PRIVATE_KEY', 'test-key')
+    monkeypatch.setenv('VAPID_PUBLIC_KEY', 'test-public')
+    monkeypatch.setenv('VAPID_SUBJECT', 'mailto:owner@localhost')
+    assert 'localhost' in alice.get('/api/push/config').json()['error']
+    monkeypatch.setenv('VAPID_SUBJECT', 'mailto:owner@example.com')
+    subscription = {'endpoint': 'https://fcm.googleapis.com/fcm/send/test-device', 'keys': {'p256dh': 'a' * 87, 'auth': 'b' * 22}}
+    alice.post('/api/push/subscribe', json=subscription).raise_for_status()
+    with patch('pywebpush.webpush') as sender:
+        assert bob.post('/api/push/test', json={'endpoint': subscription['endpoint']}).status_code == 404
+        sender.assert_not_called()
+        assert alice.post('/api/push/test', json={'endpoint': subscription['endpoint']}).status_code == 200
+        assert 'intent-test' in sender.call_args.kwargs['data']
+
+
 def test_explicit_reminder_cannot_silently_disappear():
     item = activity(reminder=None)
     item.pop('id')
