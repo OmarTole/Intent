@@ -21,7 +21,7 @@ function dateClass(date: string, today: string, selected: string) {
   return [weekday === 0 || weekday === 6 ? 'is-weekend' : '', weekday === 6 ? 'weekend-start' : '', date === today ? 'is-today' : '', date === selected ? 'is-selected-day' : ''].join(' ')
 }
 
-export default function ProgressTable({ data, day, today, busy, onDay, onOpenDay, onSection, onAdd, onSettings }: Props) {
+export default function ProgressTable({ data, day, today, onDay, onOpenDay, onSection, onAdd, onSettings }: Props) {
   const [centerRequest, setCenterRequest] = useState(0)
   const [expanded, setExpanded] = useState(false)
   const [query, setQuery] = useState('')
@@ -66,7 +66,7 @@ export default function ProgressTable({ data, day, today, busy, onDay, onOpenDay
     <TableScroll centerKey={`${day}:${expanded}:${centerRequest}`}>
       <table className="d-tracker" aria-label="Таблица прогресса">
         <colgroup><col className="d-direction-col" /><col className="d-tracker-edge" />{dates.map(date => <col key={date} />)}<col className="d-tracker-edge" /></colgroup>
-        <thead><tr><th scope="col">Направление</th>{dates.map(date => <th scope="col" key={date} data-center={date === day || undefined} className={dateClass(date, today, day)}>
+        <thead><tr><th scope="col">Направление</th><td className="d-tracker-edge" aria-hidden="true" />{dates.map(date => <th scope="col" key={date} data-center={date === day || undefined} className={dateClass(date, today, day)}>
           <button aria-label={`Открыть задачи на ${date}`} onClick={() => leave(() => onOpenDay(date))}>
             <span>{Number(date.slice(8))}</span><small>{date === today ? 'сег.' : weekdays[(new Date(date + 'T12:00:00').getDay() + 6) % 7]}</small>
           </button>
@@ -89,8 +89,8 @@ export default function ProgressTable({ data, day, today, busy, onDay, onOpenDay
     </TableScroll>
     {!sections.length && <p className="d-progress-empty">{data.sections.length ? 'Направления не найдены.' : 'Добавьте первое направление — например, «Работа» или «Здоровье».'}</p>}
     <div className="d-table-footer">
-      <button disabled={busy} onClick={() => leave(onAdd)}><Plus size={17} />Направление</button>
-      <button disabled={busy} aria-label="Настроить группы и порядок" onClick={() => leave(onSettings)}><Settings size={17} />Группы и порядок</button>
+      <button onClick={() => leave(onAdd)}><Plus size={17} />Направление</button>
+      <button aria-label="Настроить группы и порядок" onClick={() => leave(onSettings)}><Settings size={17} />Группы и порядок</button>
       <div className="d-legend">{(['done', 'partial', 'pending', 'skipped', 'missed'] as const).map(status => <span key={status}><i className={status} />{labels[status]}</span>)}</div>
     </div>
   </section>

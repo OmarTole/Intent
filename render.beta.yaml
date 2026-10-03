@@ -1,0 +1,18 @@
+# Optional always-on API. Applying this blueprint enables paid compute.
+# Confirm the current price in Render before applying. Ollama runs separately.
+services:
+  - type: web
+    name: intent
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: OLLAMA_URL
+        sync: false

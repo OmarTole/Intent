@@ -7,6 +7,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .db import Event, User, get_db
+from .commands import simple_proposal
 from .planner import PlannerData, PlannerState, PlannerUpdate, ScheduleProposal, ScheduleRequest, ScheduleGeneration, TrainingGeneration, training_to_proposal, enforce_reminder_request
 
 
@@ -44,6 +45,9 @@ def register_planner(app, current_user, interpreter, memory_for, limiter):
             zone = ZoneInfo(body.timezone)
         except (ZoneInfoNotFoundError, ValueError):
             raise HTTPException(422, "Неизвестный часовой пояс")
+        simple = simple_proposal(body.text, datetime.now(zone))
+        if simple is not None:
+            return simple
         row = db.get(PlannerState, user.id)
         existing = [{k: v for k, v in a.items() if k not in {'program', 'id'}} for a in (row.data.get("activities", []) if row else []) if not a.get('archived')][:40]
         instruction = (

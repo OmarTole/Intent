@@ -41,6 +41,21 @@ it('creates a task, saves a comment, and updates its day color', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name: /Работа, .*: Выполнено/ })).toBeTruthy())
 })
 
+it('moves Today across midnight in the planner timezone when the app resumes', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  try {
+    vi.setSystemTime(new Date('2026-10-02T18:59:00Z'))
+    server.timezone = 'Asia/Qyzylorda'
+    render(<DiaryApp />)
+    await screen.findByRole('heading', { name: 'Всё начинается с дня' })
+    const date = screen.getByLabelText('Выбранная дата') as HTMLInputElement
+    await waitFor(() => expect(date.value).toBe('2026-10-02'))
+    vi.setSystemTime(new Date('2026-10-02T19:01:00Z'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(date.value).toBe('2026-10-03'))
+  } finally { vi.useRealTimers() }
+})
+
 it('keeps offline task edits across reload and syncs them when connection returns', async () => {
   const data = { ...server, activities: [{ ...blankActivity('2026-09-29'), title: 'Рабочая задача', sectionId: 'work', recurrence: 'once' as const }] }
   server = structuredClone(data)

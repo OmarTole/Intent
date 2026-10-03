@@ -7,9 +7,9 @@
 .d-progress-modes button[aria-pressed=true] { background: var(--yellow); color: #493b14; font-weight: 650; }
 .d-expand-table { min-width: 40px; min-height: 44px; display: grid; place-items: center; }
 .d-progress-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 16px 12px; }
-.d-progress-period { display: flex; align-items: center; gap: 6px; }
+.d-progress-period { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .d-progress-period button { display: grid; place-items: center; width: 38px; height: 42px; border: 1px solid var(--line); border-radius: 8px; }
-.d-progress-period strong { font-size: 14px; font-weight: 550; text-align: center; }
+.d-progress-period strong { font-size: 14px; font-weight: 550; text-align: center; white-space: nowrap; overflow-wrap: normal; }
 .d-progress-today { font-size: 14px; min-height: 42px; padding: 6px 10px; }
 .d-progress-controls>input { width: 154px; min-width: 0; font-size: 14px; padding: 8px; min-height: 42px; margin-left: auto; }
 .d-progress-search { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0 16px 14px; }
@@ -45,7 +45,7 @@
   .d-progress-heading h2 { font-size: 16px; }
   .d-progress-modes button { padding: 6px 9px; font-size: 13px; }
   .d-progress-controls { padding: 0 10px 10px; gap: 6px; }
-  .d-progress-period { flex: 1; justify-content: space-between; }
+  .d-progress-period { flex: 1 0 100%; justify-content: space-between; }
   .d-progress-controls>input { font-size: 16px; }
   .d-progress-search { margin: 0 10px 10px; }
   .d-five-days .d-tracker td { padding: 5px 3px; }

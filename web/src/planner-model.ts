@@ -11,6 +11,11 @@ export type PlannerData = { version: number; timezone: string; activities: Activ
 export type Proposal = { message: string; clarification: boolean; activities: Omit<Activity, 'id' | 'archived'>[] }
 export const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 export const markLabels = { missed: 'Пропуск', partial: 'Частично', done: 'Выполнено', rest: 'Выходной' }
+export function validDate(day: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
+  const value = new Date(day + 'T12:00:00Z')
+  return !Number.isNaN(value.getTime()) && value.toISOString().slice(0, 10) === day
+}
 export function localDate(zone: string, at = new Date()) {
   const parts = new Intl.DateTimeFormat('en', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at)
   return ['year', 'month', 'day'].map(key => parts.find(p => p.type === key)!.value).join('-')

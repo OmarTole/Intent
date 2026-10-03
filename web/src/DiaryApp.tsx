@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { BookOpen, CalendarDays, Columns3, Settings, Shield, Plus, ChevronLeft, ChevronRight, X, Check, ArrowUpRight, Bell, LogOut, RefreshCw, WifiOff, Download, Folder, Clock, MessageCircle } from 'lucide-react'
 import { api, ApiError, errorMessage, setAccountId } from './api'
-import { blankActivity, localDate, plusDays, weekdays, type Activity, type Mark, type TaskEntry } from './planner-model'
+import { blankActivity, localDate, plusDays, weekdays, validDate, type Activity, type Mark, type TaskEntry } from './planner-model'
 import { automaticStatus, calendarStatus, dayMark, emptyDiary, groupNames, orderedSections, labels, mergeDiary, MergeConflict, normalize, tasksOn, type CellStatus, type Diary, type Section } from './diary-model'
 import { persist, readLocal, type Account, type LocalDiary } from './diary-store'
 import { disablePush, existingPush } from './push'
@@ -17,8 +17,10 @@ import DayAgenda from './DayAgenda'
 import ProgressTable from './ProgressTable'
 import ThemeToggle from './ThemeToggle'
 import QuickGuide from './QuickGuide'
+import DiaryAssistant from './DiaryAssistant'
+import People from './People'
 
-type View = 'table' | 'day' | 'calendar' | 'settings' | 'admin'
+type View = 'table' | 'day' | 'calendar' | 'settings' | 'admin' | 'people'
 type InstallEvent = Event & { prompt(): Promise<void> }
 const entry = (text: string): TaskEntry => ({ id: crypto.randomUUID(), at: new Date().toISOString(), text })
 const displayDate = (date: string, options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' }) => new Date(date + 'T12:00:00').toLocaleDateString('ru-RU', options)
@@ -41,6 +43,8 @@ export default function DiaryApp() {
   const [online, setOnline] = useState(navigator.onLine)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [serverAvailable, setServerAvailable] = useState(false)
+  const [clockTick, setClockTick] = useState(0)
   const [conflict, setConflict] = useState(false)
   const [view, setView] = useState<View>('table')
   const [day, setDay] = useState(localDate(Intl.DateTimeFormat().resolvedOptions().timeZone))
@@ -53,12 +57,20 @@ export default function DiaryApp() {
   const rawData = local?.data || emptyDiary()
   const data = { ...rawData, sections: orderedSections(rawData) }
   const today = localDate(data.timezone)
+  const previousToday = useRef(today)
+  useEffect(() => {
+    if (previousToday.current !== today) {
+      const previousDate = previousToday.current
+      setDay(current => current === previousDate ? today : current)
+      previousToday.current = today
+    }
+  }, [today, clockTick])
   useEffect(() => {
     if (!local) return
     const params = new URLSearchParams(window.location.search)
     if (params.get('view') !== 'today') return
     const date = params.get('date') || today
-    setDay(/^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) ? date : today)
+    setDay(validDate(date) ? date : today)
     setView('day')
     window.history.replaceState(null, '', window.location.pathname)
   }, [local?.account.id, today])
@@ -79,9 +91,10 @@ export default function DiaryApp() {
       const remote = normalize(await api<Diary>('/planner'))
       const merged = current.dirty ? mergeDiary(current.base, current.data, remote, prefer) : remote
       const saved = current.dirty ? normalize(await api<Diary>('/planner', 'PUT', merged)) : remote
-      await accept({ account, data: saved, base: saved, dirty: false }); setConflict(false); setError('')
+      await accept({ account, data: saved, base: saved, dirty: false }); setConflict(false); setError(''); setNotice(''); setServerAvailable(true)
       return true
     } catch (err) {
+      setServerAvailable(false)
       saveError.current = err instanceof Error ? err.message : 'Не удалось сохранить изменения.'
       if (err instanceof MergeConflict) { setConflict(true); setError(err.message) }
       else if (err instanceof ApiError && err.status === 401) { localRef.current = null; setLocal(null); setAccountId(null); setError(err.message) }
@@ -94,16 +107,24 @@ export default function DiaryApp() {
     let cancelled = false
     void (async () => {
       const cached = await readLocal().catch(() => undefined)
+      if (cached && cached.account.expiresAt * 1000 > Date.now() && !cancelled) {
+        await accept(cached)
+        setDay(localDate(cached.data.timezone))
+        setLoading(false)
+      }
       try {
         const account = await api<Account>('/auth/me')
         if (cancelled) return
         setAccountId(account.id)
-        if (cached?.account.id === account.id) { await accept({ ...cached, account }); await synchronize() }
-        else { const remote = normalize(await api<Diary>('/planner')); await accept({ account, data: remote, base: remote, dirty: false }) }
+        if (cached?.account.id === account.id) {
+          await accept({ ...(localRef.current || cached), account })
+          if (!editorOpen.current) await synchronize()
+        }
+        else { const remote = normalize(await api<Diary>('/planner')); await accept({ account, data: remote, base: remote, dirty: false }); setDay(localDate(remote.timezone)); setServerAvailable(true) }
       } catch (err) {
         if (cancelled) return
         if (err instanceof ApiError) { if (err.status === 401) { localRef.current = null; setLocal(null); setAccountId(null) } else setError(err.message) }
-        else if (cached && cached.account.expiresAt * 1000 > Date.now()) await accept(cached)
+        else if (cached && cached.account.expiresAt * 1000 > Date.now() && !localRef.current) await accept(cached)
         else if (cached) setError('Для продления входа подключитесь к интернету. Локальные изменения сохранены.')
       } finally { if (!cancelled) setLoading(false) }
     })()
@@ -112,9 +133,11 @@ export default function DiaryApp() {
   useEffect(() => {
     const on = () => { setOnline(true); if (!editorOpen.current) void synchronize() }, off = () => setOnline(false)
     const offer = (e: Event) => { e.preventDefault(); setInstall(e as InstallEvent) }
-    const timer = window.setInterval(() => { if (!document.hidden && !editorOpen.current) void synchronize() }, 60000)
+    const refresh = () => { setClockTick(value => value + 1); if (!document.hidden && !editorOpen.current) void synchronize() }
+    const timer = window.setInterval(refresh, 60000)
+    document.addEventListener('visibilitychange', refresh)
     window.addEventListener('online', on); window.addEventListener('offline', off); window.addEventListener('beforeinstallprompt', offer)
-    return () => { clearInterval(timer); window.removeEventListener('online', on); window.removeEventListener('offline', off); window.removeEventListener('beforeinstallprompt', offer) }
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('online', on); window.removeEventListener('offline', off); window.removeEventListener('beforeinstallprompt', offer) }
   }, [])
   async function save(next: Diary) {
     saveError.current = ''
@@ -202,22 +225,24 @@ export default function DiaryApp() {
   }
   if (loading) return <div className="d-loading"><BookOpen /><p>Открываем ежедневник…</p></div>
   if (!local) return <Auth busy={working} error={error} onSubmit={authenticate} />
-  const nav = [{ id: 'table', title: 'Ежедневник', icon: BookOpen }, { id: 'day', title: 'Мой день', icon: Columns3 }, { id: 'calendar', title: 'Календарь', icon: CalendarDays }] as const
+  const nav = [{ id: 'table', title: 'Ежедневник', icon: BookOpen }, { id: 'day', title: 'Мой день', icon: Columns3 }, { id: 'calendar', title: 'Календарь', icon: CalendarDays }, { id: 'people', title: 'Люди', icon: MessageCircle }] as const
   return <div className="diary-app">
     <aside className="d-sidebar"><a className="d-brand" href="/" aria-label="Intent — главная"><span><BookOpen size={23} /></span>intent<span className="d-brand-dot">.</span></a><p className="d-sidebar-caption">МЕСТО ДЛЯ ВАШЕГО ДНЯ</p><nav>{nav.map(n => <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => { setView(n.id); setSectionView(null) }}><n.icon size={19} />{n.title}</button>)}</nav><div className="d-section-heading">МОИ НАПРАВЛЕНИЯ<button aria-label="Добавить направление" onClick={() => setSectionEditor(true)} disabled={locked}><Plus size={16} /></button></div><div className="d-side-sections">{data.sections.map(s => <button key={s.id} onClick={() => setSectionView({ id: s.id })}><Folder size={15} /><span>{s.title}</span><ChevronRight size={13} /></button>)}{!data.sections.length && <p>Добавьте первое направление</p>}</div><div className="d-sidebar-bottom">{local.account.admin && <button onClick={() => setView('admin')}><Shield size={18} />Администрирование</button>}<button onClick={() => setView('settings')}><Settings size={18} />Настройки</button><div className="d-account"><span className="d-avatar">{local.account.username[0].toUpperCase()}</span><div><strong>{local.account.username}</strong><small>Личное пространство</small></div><button aria-label="Выйти" onClick={() => void logout()} disabled={locked}><LogOut size={17} /></button></div></div></aside>
-    <main className="d-main"><header className="d-topbar"><span>Мой ежедневник <ChevronRight size={13} />{view === 'table' ? 'Обзор месяца' : view === 'day' ? 'Мой день' : view === 'calendar' ? 'Календарь' : view === 'admin' ? 'Администрирование' : 'Настройки'}</span><div className="d-topbar-actions"><QuickGuide key={local.account.id} accountId={local.account.id} isEmpty={!data.sections.length && !data.activities.length} /><ThemeToggle /><button className="d-sync" disabled={locked || !online} onClick={() => void synchronize()}>{!online ? <WifiOff size={14} /> : <RefreshCw size={14} className={working ? 'd-spin' : ''} />}{!online ? 'Офлайн' : local.dirty ? 'Есть изменения' : 'Синхронизировано'}</button></div></header>
+    <main className="d-main"><header className="d-topbar"><span>Мой ежедневник <ChevronRight size={13} />{view === 'table' ? 'Обзор месяца' : view === 'day' ? 'Мой день' : view === 'calendar' ? 'Календарь' : view === 'admin' ? 'Администрирование' : view === 'people' ? 'Люди' : 'Настройки'}</span><div className="d-topbar-actions"><QuickGuide key={local.account.id} accountId={local.account.id} isEmpty={!data.sections.length && !data.activities.length} /><ThemeToggle /><button className="d-sync" disabled={locked || !online} onClick={() => void synchronize()}>{!online ? <WifiOff size={14} /> : <RefreshCw size={14} className={working ? 'd-spin' : ''} />}{!online ? 'Офлайн' : working ? 'Синхронизация…' : !serverAvailable ? 'Сервер недоступен' : local.dirty ? 'Есть изменения' : 'Синхронизировано'}</button></div></header>
       {error && <div role="alert" className="d-banner d-error">{error}<button aria-label="Закрыть ошибку" onClick={() => setError('')}><X size={16} /></button></div>}
       {notice && <div role="status" className="d-banner">{notice}<button aria-label="Закрыть сообщение" onClick={() => setNotice('')}><X size={16} /></button></div>}
       {conflict && <div className="d-banner d-conflict"><p>Изменения разных записей объединятся. Для совпавших записей выберите версию. Перед выбором можно скачать локальную копию в настройках.</p><button disabled={locked} onClick={() => void synchronize('local')}>Использовать мои изменения</button><button disabled={locked} onClick={() => void synchronize('remote')}>Использовать серверные изменения</button></div>}
       {needRefresh && <div className="d-banner"><span>Доступна новая версия приложения.</span><button disabled={locked || local.dirty || !!edit} onClick={() => void updateServiceWorker(true)}>Обновить</button></div>}
       <div className={`d-content d-view-${view}`}>
+        {view === 'people' && <People data={data} accountId={local.account.id} busy={locked} dirty={local.dirty} onAccepted={synchronize} />}
+        {['table', 'day', 'calendar'].includes(view) && <DiaryAssistant timezone={data.timezone} busy={locked} onSave={async activities => save({ ...data, activities: [...data.activities.filter(a => !activities.some(draft => draft.id === a.id)), ...activities] })} />}
         {['table', 'day', 'calendar'].includes(view) && <><div className="d-heading"><div><div className="d-eyebrow">МАЛЕНЬКИЕ ШАГИ. КАЖДЫЙ ДЕНЬ.</div><h1>{view === 'table' ? 'Всё начинается с дня' : view === 'day' ? 'Мой день' : 'Календарь'}</h1><p>{view === 'table' ? 'Планы, привычки и немного внимания к себе.' : view === 'day' ? 'У каждого дела — своё место. У вас — свой ритм.' : 'Важные даты и события, которые хочется помнить.'}</p></div><button className="d-primary" onClick={() => openNew()} disabled={locked}><Plus size={18} />Добавить задачу</button></div>
         <div className="d-summary"><div><span className="d-summary-icon"><CalendarDays size={21} /></span><div><small>ВЫБРАННЫЙ ДЕНЬ</small><strong>{displayDate(day)}<em>{displayDate(day, { weekday: 'long' })}</em></strong></div></div><div><span className="d-summary-icon green"><Check size={21} /></span><div><small>ЗАВЕРШЕНО</small><strong>{done}<em>из {todaysTasks.length} задач</em></strong></div><div className="d-progress"><i style={{ width: `${todaysTasks.length ? done / todaysTasks.length * 100 : 0}%` }} /></div></div><button className="d-summary-link" onClick={() => { setDay(today); setView('day') }}>Посмотреть сегодняшний день<ArrowUpRight size={20} /></button></div>
         {view !== 'table' && <div className="d-toolbar"><div className="d-date-controls"><button aria-label="Предыдущий период" onClick={() => view === 'day' ? setDay(plusDays(day, -1)) : shiftMonth(-1)}><ChevronLeft size={19} /></button><h2>{displayDate(view === 'day' ? day : first, view === 'day' ? { day: 'numeric', month: 'long', year: 'numeric' } : { month: 'long', year: 'numeric' })}</h2><button aria-label="Следующий период" onClick={() => view === 'day' ? setDay(plusDays(day, 1)) : shiftMonth(1)}><ChevronRight size={19} /></button><button className="d-today" onClick={() => setDay(today)}>Сегодня</button></div><label className="d-date-input">Дата<input aria-label="Выбранная дата" type="date" value={day} onChange={e => { if (e.target.value) setDay(e.target.value) }} /></label></div>}</>}
         {view === 'table' && <ProgressTable data={data} day={day} today={today} busy={locked} onDay={setDay} onOpenDay={date => { setDay(date); setView('day') }} onSection={(id, date) => setSectionView({ id, date })} onAdd={() => setSectionEditor(true)} onSettings={() => setDirectionsOpen(true)} />}
         {view === 'day' && <DayAgenda data={data} day={day} today={today} busy={locked} onOpen={activity => setEdit({ activity, date: day })} onToggle={activity => void toggleTask(activity)} onAdd={() => openNew()} />}
         {view === 'calendar' && <section className="d-panel"><div className="d-calendar">{weekdays.map(w => <div key={w} className={`d-weekday ${w === weekdays[5] || w === weekdays[6] ? 'is-weekend' : ''}`}>{w}</div>)}{Array.from({ length: (new Date(first + 'T12:00:00').getDay() + 6) % 7 }, (_, i) => <div key={'blank' + i} className="d-calendar-blank" />)}{dates.map(date => { const tasks = tasksOn(data, date), state = calendarStatus(data, date); return <button key={date} className={`d-calendar-day ${state} ${dateClass(date, today)}`} onClick={() => { setDay(date); setView('day') }}><strong>{Number(date.slice(8))}</strong>{tasks.slice(0, 3).map(a => <span key={a.id}>{a.time && `${a.time} `}{a.title}</span>)}{tasks.length > 3 && <small>Ещё {tasks.length - 3}</small>}{!tasks.length && state !== 'empty' && <small>{labels[state]}</small>}</button> })}</div><div className="d-table-footer"><Legend /></div></section>}
-        {view === 'settings' && <section className="d-settings"><div className="d-heading"><div><h1>Настройки</h1><p>Ваш ежедневник, в вашем ритме.</p></div></div><div className="d-panel d-settings-card"><h2>Напоминания на телефон</h2><p>Получайте уведомления о событиях и задачах. На iPhone сначала добавьте сайт на экран «Домой» через меню «Поделиться».</p><PushTest /><button className="d-primary" onClick={() => void enablePush()}><Bell size={17} />Включить уведомления</button><button className="d-secondary" onClick={() => void disablePush().then(() => setNotice('Уведомления отключены.')).catch(e => setError(errorMessage(e)))}>Отключить</button></div><div className="d-panel d-settings-card"><h2>Приложение и синхронизация</h2><p>{local.dirty ? 'Есть изменения, сохранённые на устройстве.' : 'Все изменения синхронизированы.'} Офлайн доступны уже загруженные данные. Напоминания доставляются при подключении к интернету.</p>{install && <button className="d-primary" onClick={() => void install.prompt()}><Download size={17} />Установить приложение</button>}<button className="d-secondary" disabled={locked || !online} onClick={() => void synchronize()}>Синхронизировать</button><button className="d-secondary" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = document.createElement('a'); a.href = url; a.download = `diary-${today}.json`; a.click(); URL.revokeObjectURL(url) }}>Скачать резервную копию</button><label>Часовой пояс<input defaultValue={data.timezone} key={data.timezone} onBlur={e => { try { localDate(e.target.value); if (e.target.value !== data.timezone) void save({ ...data, timezone: e.target.value }) } catch { setError('Неизвестный часовой пояс. Например: Asia/Qyzylorda') } }} /></label></div><div className="d-panel d-settings-card"><h2>Доступ к аккаунту</h2><p>{local.account.username}</p><p>Для восстановления пароля обратитесь к администратору.</p><button className="d-secondary" disabled={locked} onClick={() => void logout()}>Выйти из аккаунта</button></div></section>}
+        {view === 'settings' && <section className="d-settings"><div className="d-heading"><div><h1>Настройки</h1><p>Ваш ежедневник, в вашем ритме.</p></div></div><div className="d-panel d-settings-card"><h2>Напоминания на телефон</h2><p>Получайте уведомления о событиях и задачах. На iPhone сначала добавьте сайт на экран «Домой» через меню «Поделиться».</p><PushTest /><button className="d-primary" onClick={() => void enablePush()}><Bell size={17} />Включить уведомления</button><button className="d-secondary" onClick={() => void disablePush().then(() => setNotice('Уведомления отключены.')).catch(e => setError(errorMessage(e)))}>Отключить</button></div><div className="d-panel d-settings-card"><h2>Приложение и синхронизация</h2><p>{local.dirty ? 'Есть изменения, сохранённые на устройстве.' : !serverAvailable ? 'Локальная копия доступна. Сервер пока не подтвердил синхронизацию.' : 'Все изменения синхронизированы.'} Офлайн доступны уже загруженные данные. Напоминания доставляются при подключении к интернету.</p>{install && <button className="d-primary" onClick={() => void install.prompt()}><Download size={17} />Установить приложение</button>}<button className="d-secondary" disabled={locked || !online} onClick={() => void synchronize()}>Синхронизировать</button><button className="d-secondary" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const a = document.createElement('a'); a.href = url; a.download = `diary-${today}.json`; a.click(); URL.revokeObjectURL(url) }}>Скачать резервную копию</button><label>Часовой пояс<input defaultValue={data.timezone} key={data.timezone} onBlur={e => { try { localDate(e.target.value); if (e.target.value !== data.timezone) void save({ ...data, timezone: e.target.value }) } catch { setError('Неизвестный часовой пояс. Например: Asia/Qyzylorda') } }} /></label></div><div className="d-panel d-settings-card"><h2>Доступ к аккаунту</h2><p>{local.account.username}</p><p>Для восстановления пароля обратитесь к администратору.</p><button className="d-secondary" disabled={locked} onClick={() => void logout()}>Выйти из аккаунта</button></div></section>}
         {view === 'settings' && data.activities.some(a => a.archived) && <section className="d-panel d-settings-card"><h2>Архив</h2><p>Откройте задачу, чтобы восстановить её.</p>{data.activities.filter(a => a.archived).map(a => taskCard(a, a.start))}</section>}
         {view === 'admin' && local.account.admin && <Admin onError={setError} />}
         {view === 'table' && <div className="d-bottom-note"><span>Не обязательно идеально. Главное — замечать свой прогресс.</span><span>Ваше личное пространство <BookOpen size={14} /></span></div>}

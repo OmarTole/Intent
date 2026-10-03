@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, ChevronDown, Clock, MessageCircle } from 'lucide-react'
-import { weekdays, type Activity, type Mark, type TaskEntry } from './planner-model'
+import { validDate, weekdays, type Activity, type Mark, type TaskEntry } from './planner-model'
 import { dayMark, type Diary } from './diary-model'
 
 const displayDate = (date: string) => new Date(date + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
@@ -23,7 +23,8 @@ export default function TaskForm({ value, date, data, busy, onSave }: {
   async function submit() {
     setSaveError('')
     if (!a.title.trim()) { setSaveError('Введите название задачи.'); return }
-    if (!a.start || !/^\d{4}-\d{2}-\d{2}$/.test(a.start)) { setSaveError('Укажите дату задачи.'); return }
+    if (!validDate(a.start)) { setSaveError('Укажите корректную дату задачи.'); return }
+    if (a.end && !validDate(a.end)) { setAdvanced(true); setSaveError('Укажите корректную дату окончания.'); return }
     if (a.recurrence === 'weekly' && !a.weekdays.length) { setSaveError('Выберите хотя бы один день недели для повторения.'); return }
     if (a.end && a.end < a.start && a.recurrence !== 'once') { setAdvanced(true); setSaveError('Дата окончания повторений должна быть не раньше даты начала.'); return }
     if (duration && (!Number.isInteger(Number(duration)) || Number(duration) < 5 || Number(duration) > 1440)) { setAdvanced(true); setSaveError('Укажите длительность от 5 до 1440 минут или оставьте поле пустым.'); return }
@@ -59,7 +60,7 @@ export default function TaskForm({ value, date, data, busy, onSave }: {
         <label>Выполнение за {displayDate(a.recurrence === 'once' ? a.start : date)}<select value={mark.status} onChange={e => setMark({ ...mark, status: e.target.value as Mark['status'] })}><option value="missed">Запланировано</option><option value="partial">Частично выполнено</option><option value="done">Полностью выполнено</option><option value="rest">Пропустить в этот день</option></select></label>
         {existing && value.recurrence !== 'once' && <label>Применить изменения<select value={only ? 'one' : 'series'} onChange={e => setOnly(e.target.value === 'one')}><option value="series">Ко всей серии (отметка — только за выбранный день)</option><option value="one">Только к событию за {date}</option></select></label>}
         <h3>Комментарии и история</h3><label>Новый комментарий<textarea rows={3} maxLength={3000} value={comment} placeholder="Как всё прошло? Что нужно учесть?" onChange={e => setComment(e.target.value)} /></label>
-        <div className="d-timeline">{[...(a.comments || []).map(e => ({ ...e, comment: true })), ...(a.history || []).map(e => ({ ...e, comment: false }))].sort((x, y) => y.at.localeCompare(x.at)).map(e => <article key={e.id}><span>{e.comment ? <MessageCircle size={15} /> : <Clock size={15} />}</span><div><small>{e.comment ? 'Комментарий' : 'История'} · {new Date(e.at).toLocaleString('ru-RU')}</small><p>{e.text}</p></div></article>)}</div>
+        <div className="d-timeline">{[...(a.comments || []).map(e => ({ ...e, comment: true })), ...(a.history || []).map(e => ({ ...e, comment: false }))].sort((x, y) => y.at.localeCompare(x.at)).map(e => <article key={e.id}><span>{e.comment ? <MessageCircle size={15} /> : <Clock size={15} />}</span><div><small>{e.comment ? 'Комментарий' : 'История'} · {new Date(e.at).toLocaleString('ru-RU', { timeZone: data.timezone })}</small><p>{e.text}</p></div></article>)}</div>
         {existing && <button type="button" className="d-secondary" onClick={() => void onSave({ ...a, archived: !a.archived }, date).catch(error => setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить изменения.'))}>{a.archived ? 'Восстановить' : 'В архив'}</button>}
       </div>}
     </fieldset>

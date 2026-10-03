@@ -28,7 +28,7 @@
   .d-heading>div, .d-progress-heading h2, .d-progress-period { min-width: 0; }
   .d-heading h1 { overflow-wrap: anywhere; }
   .d-heading>.d-primary { flex-shrink: 0; }
-  .d-progress-period strong { overflow-wrap: anywhere; }
+  .d-progress-period strong { overflow-wrap: normal; white-space: nowrap; }
   .d-progress-period button { flex-shrink: 0; }
   .d-modal { overflow-x: hidden; overscroll-behavior-x: none; }
   .d-modal input:not([type=checkbox]), .d-modal select, .d-modal textarea,
@@ -38,4 +38,5 @@
     min-width: 0;
   }
   .d-settings-card p, .d-timeline p { overflow-wrap: anywhere; }
+  .d-mobile-nav button { min-width: 0; padding: 5px 3px; font-size: 10px; }
 }

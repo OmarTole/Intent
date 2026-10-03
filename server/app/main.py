@@ -264,6 +264,8 @@ async def interpret(body: Interpretation, user: User = Depends(current_user)):
 
 from .planner_api import register_planner
 register_planner(app, current_user, interpreter, memory_for, limiter)
+from .invitations import register_invitations
+register_invitations(app, current_user, limiter)
 from .push import PushSubscription, register_push, reminder_loop
 register_push(app, current_user)
 register_accounts(app, current_user, limiter)
