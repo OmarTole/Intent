@@ -1,5 +1,9 @@
 from uuid import uuid4
 
+from app.accounts import PhoneIdentity
+from app.db import User
+from app.security import hash_password
+
 
 def event():
     return {"id": str(uuid4()), "title": "Встреча", "kind": "event", "start": "2026-10-04",
@@ -39,3 +43,23 @@ def test_cancellation_and_foreign_events(clients):
     assert bob.post(f"/api/invitations/{invite['id']}/respond", json={"status": "accepted"}).status_code == 409
     assert not bob.get('/api/planner').json()['activities']
     assert bob.post(f"/api/invitations/{uuid4()}/respond", json={"status": "accepted"}).status_code == 404
+
+
+def test_contacts_lookup_and_invite_by_phone(clients):
+    alice, _, sessions = clients
+    phone = '+77011234567'
+    with sessions() as db:
+        user = User(username='phone-user', password_hash=hash_password('phone-login-password'))
+        db.add(user)
+        db.flush()
+        user_id = user.id
+        db.add(PhoneIdentity(phone=phone, user_id=user.id))
+        db.commit()
+    lookup = alice.post('/api/contacts/lookup', json={'phones': [phone, '+77019999999']})
+    assert lookup.status_code == 200
+    assert lookup.json()['registered'] == [phone]
+    activity = event()
+    alice.put('/api/planner', json={'version': 0, 'activities': [activity]})
+    invitation = alice.post('/api/invitations', json={'activityId': activity['id'], 'recipient': '+7 701 123 45 67'})
+    assert invitation.status_code == 201
+    assert invitation.json()['recipientId'] == user_id

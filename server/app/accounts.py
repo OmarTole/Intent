@@ -1,14 +1,15 @@
 """Account administration exposes usage counts, never personal planner content."""
 import time
+import re
 from fastapi import Depends, HTTPException, Request
-from pydantic import Field
+from pydantic import Field, field_validator
 from sqlalchemy import Boolean, Float, ForeignKey, String, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from .db import Base, LoginSession, User, get_db
 from .planner import PlannerState
 from .schemas import StrictModel
-from .security import hash_password
+from .security import hash_password, verify_password
 
 
 class AccountProfile(Base):
@@ -20,9 +21,35 @@ class AccountProfile(Base):
     last_seen: Mapped[float] = mapped_column(Float, default=time.time)
 
 
+class PhoneIdentity(Base):
+    __tablename__ = "phone_identities"
+    phone: Mapped[str] = mapped_column(String(16), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+
+
 class Registration(StrictModel):
-    email: str = Field(min_length=5, max_length=80, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    email: str = Field(min_length=5, max_length=80)
     password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_account_name(cls, value: str) -> str:
+        value = value.strip()
+        if "@" in value:
+            if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+                raise ValueError("Введите корректный телефон в международном формате или почту.")
+            return value.lower()
+        digits = re.sub(r"[\s()\-]", "", value)
+        if not re.fullmatch(r"\+[1-9]\d{7,14}", digits):
+            raise ValueError("Введите телефон в международном формате, например +77011234567.")
+        return digits
+
+
+def normalize_identifier(value: str) -> str:
+    value = value.strip()
+    if "@" in value:
+        return value.lower()
+    return re.sub(r"[\s()\-]", "", value)
 
 
 class BlockAccount(StrictModel):
@@ -31,6 +58,19 @@ class BlockAccount(StrictModel):
 
 class ResetPassword(StrictModel):
     password: str = Field(min_length=12, max_length=256)
+
+
+class PhoneUpdate(StrictModel):
+    phone: str = Field(min_length=8, max_length=24)
+    password: str = Field(min_length=1, max_length=256)
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        value = re.sub(r"[\s()\-]", "", value)
+        if not re.fullmatch(r"\+[1-9]\d{7,14}", value):
+            raise ValueError("Введите телефон в международном формате, например +77011234567.")
+        return value
 
 
 def register_accounts(app, current_user, limiter):
@@ -43,16 +83,37 @@ def register_accounts(app, current_user, limiter):
     @app.post('/api/auth/register', status_code=201)
     def register(body: Registration, request: Request, db: Session = Depends(get_db)):
         limiter.check('register:' + (request.client.host if request.client else 'unknown'), 5, 3600)
-        user = User(username=body.email.lower(), password_hash=hash_password(body.password))
+        user = User(username=body.email, password_hash=hash_password(body.password))
         db.add(user)
         try:
             db.flush()
             db.add(AccountProfile(user_id=user.id))
+            if body.email.startswith("+"):
+                db.add(PhoneIdentity(phone=body.email, user_id=user.id))
             db.commit()
         except IntegrityError:
             db.rollback()
-            raise HTTPException(409, "Эта почта уже зарегистрирована.")
+            raise HTTPException(409, "Такой аккаунт или номер телефона уже зарегистрирован.")
         return {"id": user.id}
+
+    @app.put('/api/auth/phone')
+    def set_phone(body: PhoneUpdate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+        if not verify_password(body.password, user.password_hash):
+            raise HTTPException(401, "Пароль не подошёл.")
+        owner = db.get(PhoneIdentity, body.phone)
+        if owner and owner.user_id != user.id:
+            raise HTTPException(409, "Этот номер уже связан с другим аккаунтом.")
+        current = db.scalar(select(PhoneIdentity).where(PhoneIdentity.user_id == user.id))
+        if current:
+            current.phone = body.phone
+        else:
+            db.add(PhoneIdentity(phone=body.phone, user_id=user.id))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(409, "Этот номер уже связан с другим аккаунтом.")
+        return {"phone": body.phone}
 
     @app.get('/api/admin/users')
     def users(admin: User = Depends(administrator), db: Session = Depends(get_db)):

@@ -3,6 +3,56 @@ import re
 from datetime import datetime, timedelta, date
 from .planner import ScheduleProposal
 
+WEEKDAYS = {
+    'понедельник': 0, 'понедельника': 0, 'вторник': 1, 'вторника': 1,
+    'среда': 2, 'среду': 2, 'среды': 2, 'четверг': 3, 'четверга': 3,
+    'пятница': 4, 'пятницу': 4, 'пятницы': 4, 'суббота': 5,
+    'субботу': 5, 'субботы': 5, 'воскресенье': 6, 'воскресенья': 6,
+}
+
+
+def enforce_explicit_details(proposal: ScheduleProposal, text: str, now: datetime) -> ScheduleProposal:
+    """Keep explicit user dates, weekdays and durations from being overwritten by model guesses."""
+    if proposal.clarification:
+        return proposal
+    weekday_match = re.search(r"\b(?:в\s+)?(" + "|".join(WEEKDAYS) + r")\b", text, re.I)
+    date_match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
+    duration = None
+    duration_match = re.search(r"\bна\s+(полтора|полторы|\d+(?:[.,]\d+)?)\s*(час(?:а|ов)?|ч\.?|минут(?:у|ы)?|мин\.?)\b", text, re.I)
+    if duration_match:
+        amount, unit = duration_match.groups()
+        amount = 1.5 if amount.lower() in ('полтора', 'полторы') else float(amount.replace(',', '.'))
+        duration = round(amount * (60 if unit.lower().startswith(('час', 'ч')) else 1))
+
+    changed = False
+    for item in proposal.activities:
+        updates = {}
+        if date_match:
+            explicit_date = date.fromisoformat(date_match.group(1))
+            if item.start != explicit_date:
+                updates['start'] = explicit_date
+                if item.end is not None and item.end == item.start:
+                    updates['end'] = explicit_date
+        elif weekday_match:
+            weekday = WEEKDAYS[weekday_match.group(1).lower()]
+            delta = (weekday - now.date().weekday()) % 7
+            if delta == 0 and item.time and item.time <= now.strftime('%H:%M'):
+                delta = 7
+            explicit_date = now.date() + timedelta(days=delta)
+            if item.start != explicit_date:
+                updates['start'] = explicit_date
+                if item.end is not None and item.end == item.start:
+                    updates['end'] = explicit_date
+        if duration is not None and item.duration != duration:
+            updates['duration'] = max(5, min(duration, 1440))
+        if updates:
+            proposal.activities[proposal.activities.index(item)] = item.model_copy(update=updates)
+            changed = True
+    if changed:
+        first = proposal.activities[0]
+        proposal.message = f"Проверьте черновик: {first.title}, {first.start.isoformat()} в {first.time}, {first.duration} мин."
+    return proposal
+
 
 def simple_proposal(text: str, now: datetime) -> ScheduleProposal | None:
     match = re.fullmatch(

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.db import LoginSession
+from app.accounts import PhoneIdentity
 from app.main import app
 from app.schemas import AgentResponse, CoachResponse
 
@@ -18,6 +19,36 @@ def goal():
 
 def editable(data):
     return {key: value for key, value in data.items() if key not in {"id", "createdAt", "updatedAt"}}
+
+
+def test_phone_registration_and_long_session(clients):
+    alice, _, _ = clients
+    created = alice.post('/api/auth/register', json={"email": "+7 (701) 123-45-67", "password": "phone-login-password"})
+    assert created.status_code == 201
+    login = alice.post('/api/auth/login', json={"username": "+7 701 123 45 67", "password": "phone-login-password"})
+    assert login.status_code == 200
+    assert login.json()['username'] == '+77011234567'
+    assert login.json()['expiresAt'] - time.time() > 9 * 365 * 24 * 3600
+
+
+def test_existing_account_can_add_phone_and_login_with_it(clients):
+    alice, _, _ = clients
+    linked = alice.put('/api/auth/phone', json={"phone": "+77011234567", "password": "test-password-123"})
+    assert linked.status_code == 200
+    assert alice.get('/api/auth/me').json()['phone'] == '+77011234567'
+    assert alice.post('/api/auth/login', json={"username": "+7 701 123 45 67", "password": "test-password-123"}).status_code == 200
+
+
+def test_active_legacy_session_is_extended_on_use(clients):
+    alice, _, sessions = clients
+    with sessions() as db:
+        session = db.scalar(select(LoginSession))
+        session.expires_at = time.time() + 5 * 86400
+        db.commit()
+    response = alice.get('/api/auth/me')
+    assert response.status_code == 200
+    assert response.json()['expiresAt'] - time.time() > 9 * 365 * 24 * 3600
+    assert 'Max-Age=315360000' in response.headers['set-cookie']
 
 
 def test_auth_cookie_logout_and_expiry(clients):

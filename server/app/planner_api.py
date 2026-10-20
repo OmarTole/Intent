@@ -7,7 +7,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .db import Event, User, get_db
-from .commands import simple_proposal
+from .commands import enforce_explicit_details, simple_proposal
 from .planner import PlannerData, PlannerState, PlannerUpdate, ScheduleProposal, ScheduleRequest, ScheduleGeneration, TrainingGeneration, training_to_proposal, enforce_reminder_request
 
 
@@ -78,4 +78,4 @@ def register_planner(app, current_user, interpreter, memory_for, limiter):
             instruction += " program — только известные детали события, без придуманных занятий и советов. Можно пустую строку."
         generated = await interpreter._generate(schema, instruction, [{"role": "user", "content": body.text}], 3000)
         result = training_to_proposal(generated) if isinstance(generated, TrainingGeneration) else ScheduleProposal.model_validate(generated.root.model_dump())
-        return enforce_reminder_request(result, body.text)
+        return enforce_reminder_request(enforce_explicit_details(result, body.text, datetime.now(zone)), body.text)

@@ -1,5 +1,5 @@
 import type { Diary } from './diary-model'
-export type Account = { id: string; username: string; expiresAt: number; admin?: boolean }
+export type Account = { id: string; username: string; phone?: string | null; expiresAt: number; admin?: boolean }
 export type LocalDiary = { account: Account; base: Diary; data: Diary; dirty: boolean }
 function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

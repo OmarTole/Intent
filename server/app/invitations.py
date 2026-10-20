@@ -1,18 +1,21 @@
 """Explicit invitations; only an approved event snapshot is shared."""
 import time
+import re
 from datetime import datetime
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException
-from pydantic import Field
+from pydantic import Field, field_validator
 from sqlalchemy import JSON, Float, ForeignKey, String, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from .db import Base, User, get_db
+from .accounts import PhoneIdentity
 from .planner import Activity, PlannerData, PlannerState
 from .schemas import StrictModel
+from .accounts import normalize_identifier
 
 
 class Invitation(Base):
@@ -29,6 +32,29 @@ class Invitation(Base):
 class InviteRequest(StrictModel):
     activityId: UUID
     recipient: str = Field(min_length=1, max_length=80)
+
+    @field_validator("recipient")
+    @classmethod
+    def normalize_recipient(cls, value: str) -> str:
+        normalized = normalize_identifier(value)
+        if "@" in normalized:
+            if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
+                raise ValueError("Введите корректную почту или телефон.")
+        elif not re.fullmatch(r"\+[1-9]\d{7,14}", normalized) and not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", normalized):
+            raise ValueError("Введите имя участника, почту или телефон в международном формате.")
+        return normalized
+
+
+class ContactLookup(StrictModel):
+    phones: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator("phones")
+    @classmethod
+    def normalize_phones(cls, values: list[str]) -> list[str]:
+        result = [normalize_identifier(value) for value in values]
+        if any(not re.fullmatch(r"\+[1-9]\d{7,14}", value) for value in result):
+            raise ValueError("Все номера должны быть в международном формате.")
+        return list(dict.fromkeys(result))
 
 
 class InviteResponse(StrictModel):
@@ -49,6 +75,13 @@ def register_invitations(app, current_user, limiter):
         ).order_by(Invitation.created_at.desc()).limit(200))
         return [serialize(row, db) for row in rows]
 
+    @app.post("/api/contacts/lookup")
+    def lookup_contacts(body: ContactLookup, user: User = Depends(current_user), db: Session = Depends(get_db)):
+        limiter.check("contacts:" + user.id, 10, 60)
+        matches = set(db.scalars(select(PhoneIdentity.phone).where(
+            PhoneIdentity.phone.in_(body.phones), PhoneIdentity.user_id != user.id)))
+        return {"registered": [phone for phone in body.phones if phone in matches]}
+
     @app.post("/api/invitations", status_code=201)
     def invite(body: InviteRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
         limiter.check("invite:" + user.id, 10)
@@ -58,7 +91,13 @@ def register_invitations(app, current_user, limiter):
             raise HTTPException(404, "Сохранённое событие не найдено.")
         if event["recurrence"] != "once" or not event["time"]:
             raise HTTPException(422, "В бете приглашения доступны для разового события с временем.")
-        recipient = db.scalar(select(User).where(User.username == body.recipient.strip().lower()))
+        if body.recipient.startswith("+"):
+            identity = db.get(PhoneIdentity, body.recipient)
+            recipient = db.get(User, identity.user_id) if identity else None
+            if not recipient:
+                recipient = db.scalar(select(User).where(User.username == body.recipient))
+        else:
+            recipient = db.scalar(select(User).where(User.username == body.recipient))
         if not recipient or recipient.id == user.id:
             raise HTTPException(422, "Укажите аккаунт другого участника приложения.")
         existing = db.scalar(select(Invitation).where(

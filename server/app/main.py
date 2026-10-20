@@ -16,7 +16,7 @@ from .config import settings
 from .db import AgentMessage, Base, Event, Intent, LoginSession, User, UserMemory, engine, get_db
 from .schemas import AgentTurnRequest, CoachRequest, CreateIntent, Interpretation, Login, MemoryData, UpdateIntent
 from .security import RateLimiter, hash_password, token_hash, verify_password
-from .accounts import AccountProfile, register_accounts
+from .accounts import AccountProfile, PhoneIdentity, normalize_identifier, register_accounts
 
 COOKIE = "intent_session"
 limiter = RateLimiter()
@@ -58,7 +58,7 @@ async def protect_requests(request: Request, call_next):
     return response
 
 
-def current_user(request: Request, db: Session = Depends(get_db)) -> User:
+def current_user(request: Request, response: Response, db: Session = Depends(get_db)) -> User:
     token = request.cookies.get(COOKIE)
     login_session = db.get(LoginSession, token_hash(token)) if token else None
     if not login_session or login_session.expires_at < time.time():
@@ -78,6 +78,11 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     elif profile.last_seen < time.time() - 60:
         profile.last_seen = time.time()
         db.commit()
+    if login_session.expires_at < time.time() + settings.session_seconds - 3600:
+        login_session.expires_at = time.time() + settings.session_seconds
+        db.commit()
+        response.set_cookie(COOKIE, token, httponly=True, secure=settings.cookie_secure,
+                            samesite="strict", max_age=settings.session_seconds, path="/api")
     return user
 
 
@@ -103,10 +108,13 @@ def health(db: Session = Depends(get_db)):
 
 @app.post("/api/auth/login")
 def login(body: Login, request: Request, response: Response, db: Session = Depends(get_db)):
-    username = body.username.lower()
+    username = normalize_identifier(body.username)
     limiter.check("login:global", 100)
     limiter.check("login:" + username, 10)
     user = db.scalar(select(User).where(User.username == username))
+    if not user and username.startswith("+"):
+        identity = db.get(PhoneIdentity, username)
+        user = db.get(User, identity.user_id) if identity else None
     valid = verify_password(body.password, user.password_hash if user else DUMMY_HASH)
     if not user or not valid:
         raise HTTPException(401, "Неверный логин или пароль.")
@@ -121,16 +129,18 @@ def login(body: Login, request: Request, response: Response, db: Session = Depen
     expires = time.time() + settings.session_seconds
     db.add(LoginSession(token_hash=token_hash(token), user_id=user.id, expires_at=expires))
     db.commit()
+    phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
     response.set_cookie(COOKIE, token, httponly=True, secure=settings.cookie_secure,
                         samesite="strict", max_age=settings.session_seconds, path="/api")
-    return {"id": user.id, "username": user.username, "expiresAt": expires, "admin": bool(profile and profile.admin)}
+    return {"id": user.id, "username": user.username, "phone": phone, "expiresAt": expires, "admin": bool(profile and profile.admin)}
 
 
 @app.get("/api/auth/me")
 def me(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     login_session = db.get(LoginSession, token_hash(request.cookies[COOKIE]))
     profile = db.get(AccountProfile, user.id)
-    return {"id": user.id, "username": user.username, "expiresAt": login_session.expires_at, "admin": bool(profile and profile.admin)}
+    phone = db.scalar(select(PhoneIdentity.phone).where(PhoneIdentity.user_id == user.id))
+    return {"id": user.id, "username": user.username, "phone": phone, "expiresAt": login_session.expires_at, "admin": bool(profile and profile.admin)}
 
 
 @app.post("/api/auth/logout", status_code=204)
