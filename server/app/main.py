@@ -93,7 +93,8 @@ def memory_for(user_id: str, db: Session) -> MemoryData:
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
-    return {"status": "ok", "application": "intent-agent"}
+    # "ai" shows whether the cloud key was picked up after a deploy; it never exposes the key.
+    return {"status": "ok", "application": "intent-agent", "ai": "cloud" if interpreter.cloud else "ollama"}
 
 
 @app.post("/api/auth/login")

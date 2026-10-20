@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 import httpx
 from fastapi import HTTPException
@@ -7,6 +8,7 @@ from pydantic import ValidationError
 
 from .config import Settings
 
+log = logging.getLogger(__name__)
 
 class Interpreter:
     """Bounded queue to the assistant model with JSON-schema constrained output.
@@ -39,7 +41,15 @@ class Interpreter:
                 content = await (self._cloud(client, schema_type, schema, [system, *messages], predict) if self.cloud
                                  else self._ollama(client, schema_type, schema, [system, *messages], predict))
             return schema_type.model_validate_json(content)
-        except (httpx.HTTPError, ValidationError, ValueError, KeyError, TypeError, IndexError):
+        except (httpx.HTTPError, ValidationError, ValueError, KeyError, TypeError, IndexError) as error:
+            response = getattr(error, "response", None)
+            # The reason goes to the server log (never the key or the user's text), so hosting logs explain a 503.
+            log.warning("AI request failed: provider=%s error=%s status=%s detail=%s",
+                        "cloud" if self.cloud else "ollama", type(error).__name__,
+                        response.status_code if response is not None else "-",
+                        response.text[:300] if response is not None else str(error)[:200])
+            if not self.cloud and isinstance(error, httpx.ConnectError):
+                raise HTTPException(503, "ИИ на сервере не настроен. Простые фразы и ручной ввод работают.")
             raise HTTPException(503, "ИИ сейчас недоступен. Повторите позже или создайте запись вручную.")
         finally:
             if acquired:

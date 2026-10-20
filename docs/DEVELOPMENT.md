@@ -74,11 +74,21 @@ cd web; npm test; npm run build
 
 **Важно:** корень проекта `C:\Users\Admin\Desktop\Intent` — **не** git-репозиторий. Git-клон GitHub-репозитория `OmarTole/Intent` (ветка `main`) лежит в `.local/deploy-repo`.
 
-Публикация сейчас выглядит так:
+Публикация:
 
-1. Изменённые файлы копируются из рабочей папки в `.local/deploy-repo`. Удалённые файлы удаляются там же.
-2. В `.local/deploy-repo` делается коммит и `git push`.
-3. Render подхватывает `main` автоматически, если сервис создан по blueprint.
+1. `.venv/Scripts/python.exe scripts/publish.py` синхронизирует публикуемые файлы в `.local/deploy-repo`:
+   - копирует их с окончаниями строк LF;
+   - удаляет там файлы, которых больше нет в рабочей папке;
+   - печатает список удалённого и добавленного.
+
+   Список публикуемых файлов задан в самом скрипте.
+2. В `.local/deploy-repo`:
+   - `git add -A` и `git status`;
+   - проверка на секреты: ключ Groq, пароль из `.local/local-login.json`, приватный VAPID-ключ;
+   - серверные тесты;
+   - `git commit`;
+   - `git push origin main`. Вход в GitHub хранит Git Credential Manager. Если вход не сохранён, перед push снимите `GIT_TERMINAL_PROMPT`, тогда появится окно входа GitHub.
+3. Render: **Auto-Deploy, похоже, выключен** — после push нажать Render → сервис → Manual Deploy → Deploy latest commit.
 
 В GitHub попадают только:
 

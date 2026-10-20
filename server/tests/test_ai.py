@@ -64,6 +64,16 @@ def test_cloud_request_keeps_token_budget_small():
     assert "JSON-схеме" not in body["messages"][0]["content"]
 
 
+def test_missing_local_model_says_ai_is_not_configured():
+    client = client_for({})
+    client.post.side_effect = httpx.ConnectError("refused")
+    with patch("app.ai.httpx.AsyncClient", return_value=client):
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(generate(Interpreter(LOCAL)))
+    assert error.value.status_code == 503
+    assert "не настроен" in error.value.detail
+
+
 def test_cloud_schema_mismatch_is_recoverable():
     with patch("app.ai.httpx.AsyncClient", return_value=client_for({"error": {"code": "json_validate_failed"}}, status=400)):
         with pytest.raises(HTTPException) as error:

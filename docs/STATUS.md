@@ -25,7 +25,13 @@
 
 ## Ближайшие задачи (по порядку)
 
-1. **Опубликовать чистку и Groq.**
+1. **Опубликовать чистку, Groq и новый интерфейс.** ✅ На GitHub — коммит `d24fab8` от 20.10.2026. **Осталось владельцу в Render:**
+   - добавить `GROQ_API_KEY` в Environment;
+   - нажать Manual Deploy;
+   - проверить сайт и вкладку «Чат»;
+   - включить Auto-Deploy, если нужно.
+
+   Ниже — прежний перечень шагов, для истории.
    - В `.local/deploy-repo` удалить:
      - `web/src/App.tsx`, `App.test.tsx`, `Planner.tsx`, `Planner.test.tsx`, `storage.ts`, `types.ts`, `style.css`, `calm.css`, `planner.css`;
      - `docs/BETA_CHANGELOG.md`.
