@@ -10,7 +10,6 @@ export type Mark = { activityId: string; date: string; status: 'missed' | 'parti
 export type PlannerData = { version: number; timezone: string; activities: Activity[]; marks: Mark[] }
 export type Proposal = { message: string; clarification: boolean; activities: Omit<Activity, 'id' | 'archived'>[] }
 export const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-export const markLabels = { missed: 'Пропуск', partial: 'Частично', done: 'Выполнено', rest: 'Выходной' }
 export function validDate(day: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
   const value = new Date(day + 'T12:00:00Z')
@@ -34,29 +33,6 @@ export function blankActivity(day: string): Activity {
 }
 export function emptyPlanner(): PlannerData { return { version: 0, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Qyzylorda', activities: [], marks: [] } }
 export function scheduleLabel(a: Activity) {
-  return (a.recurrence === 'daily' ? 'Каждый день' : a.recurrence === 'weekly' ? a.weekdays.map(d => weekdays[d]).join(', ') : a.recurrence === 'yearly' ? 'Ежегодно' : a.start) + (a.time ? ` · ${a.time} · ${a.duration} мин` : ' · Без времени') + (a.reminder === null ? '' : a.reminder === 0 ? ' · Напомнить в начале' : ` · Напомнить за ${a.reminder} мин`)
-}
-export function overlaps(a: Activity, b: Activity, day: string) {
-  if (!a.time || !b.time || !occurs(a, day) || !occurs(b, day) || a.archived || b.archived) return false
-  const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
-  return minutes(a.time) < minutes(b.time) + b.duration && minutes(b.time) < minutes(a.time) + a.duration
-}
-
-// Only unambiguous, explicit reminder commands can bypass the plan approval step.
-export function canSaveReminderDirectly(text: string, proposal: Proposal, today: string) {
-  if (!/напомни/i.test(text) || proposal.clarification || proposal.activities.length !== 1 || /трениров|плаван|силов/i.test(text)) return false
-  const activity = proposal.activities[0]
-  if (activity.kind !== 'event' || !['once', 'yearly'].includes(activity.recurrence) || activity.reminder === null) return false
-  if (!/за\s+(?:день|сутки|неделю|час|\d+\s*(?:мин|час|дн|день|недел))|в\s+момент\s+начала/i.test(text)) return false
-  const at = text.match(/(?:^|\s)([01]?\d|2[0-3]):([0-5]\d)(?:\s|[.,]|$)/)
-  if (!at || activity.time !== `${at[1].padStart(2, '0')}:${at[2]}`) return false
-  const iso = text.match(/\b(\d{4}-\d{2}-\d{2})\b/)
-  if (iso) return activity.start === iso[1] && iso[1] >= today
-  const date = text.toLowerCase().match(/(?:^|\s)(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(?:\s+(20\d{2}))?/)
-  if (!date) return false
-  const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
-  const tail = `${String(months.indexOf(date[2]) + 1).padStart(2, '0')}-${date[1].padStart(2, '0')}`
-  let year = date[3] || today.slice(0, 4)
-  if (!date[3] && `${year}-${tail}` < today) year = String(Number(year) + 1)
-  return activity.start === `${year}-${tail}` && activity.start >= today
+  const date = (options: Intl.DateTimeFormatOptions) => new Date(a.start + 'T12:00:00').toLocaleDateString('ru-RU', options)
+  return (a.recurrence === 'daily' ? 'Каждый день' : a.recurrence === 'weekly' ? a.weekdays.map(d => weekdays[d]).join(', ') : a.recurrence === 'yearly' ? `Ежегодно, ${date({ day: 'numeric', month: 'long' })}` : a.recurrence === 'monthly' ? `Каждый месяц, ${Number(a.start.slice(8))} числа` : date({ weekday: 'short', day: 'numeric', month: 'long' })) + (a.time ? ` · ${a.time} · ${a.duration} мин` : ' · Без времени') + (a.reminder === null ? '' : a.reminder === 0 ? ' · Напомнить в начале' : ` · Напомнить за ${a.reminder} мин`)
 }

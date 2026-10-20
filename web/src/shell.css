@@ -1,0 +1,100 @@
+/* App shell: chat-first navigation. Loaded last, so it overrides older layout rules in diary.css. */
+:root {
+  --bg: #faf9f6; --surface: #fffefa; --sidebar: #f3f2ed; --soft: #f2f0e9; --soft-hover: #e9e6dc;
+  --text: #292823; --muted: #857f72; --line: #eae7df;
+  --accent: #f5c842; --accent-strong: #a8801a; --accent-ink: #4f4018; --accent-soft: #faefc6; --accent-line: #e2c66a;
+  --error-bg: #fff0e8; --error-text: #975e42;
+  --topbar-h: 56px; --mobile-nav-h: 62px; --sidebar-w: 220px;
+}
+:root[data-theme='dark'] {
+  --bg: #181818; --surface: #232323; --sidebar: #1f1f1f; --soft: #2c2b28; --soft-hover: #36342f;
+  --text: #efede8; --muted: #aaa59b; --line: #3a3833;
+  --accent-strong: #dfbc5a; --accent-soft: #4b4022; --accent-line: #7a6630;
+  --error-bg: #452c25; --error-text: #f0b69e;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.diary-app { background: var(--bg); color: var(--text); }
+
+/* Desktop sidebar */
+.d-sidebar { width: var(--sidebar-w); padding: 18px 12px 14px; background: var(--sidebar); border-right: 1px solid var(--line); }
+.d-sidebar .d-brand { font-size: 23px; padding: 0 8px; margin-bottom: 22px; gap: 9px; }
+.d-sidebar .d-brand > span:first-child { width: 32px; height: 32px; border-radius: 9px; }
+.d-sidebar nav { gap: 2px; }
+.d-sidebar nav button { padding: 10px 12px; font-size: 15px; color: var(--muted); gap: 11px; }
+.d-sidebar nav button:hover { background: var(--soft-hover); color: var(--text); }
+.d-sidebar nav button.active { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.d-sidebar nav button.active svg { color: var(--accent-strong); }
+.d-nav-divider { height: 1px; background: var(--line); margin: 12px 10px; }
+.d-sidebar-bottom { margin-top: auto; }
+.d-sidebar .d-account { border-color: var(--line); }
+.d-sidebar .d-account strong { font-size: 13px; }
+.d-sidebar .d-account small { font-size: 11px; }
+.d-main { margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-height: 100dvh; padding-bottom: 0; }
+
+/* Top bar: only status and quick actions */
+.d-topbar { height: var(--topbar-h); padding: 0 20px; background: var(--bg); border-bottom: 1px solid var(--line); justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+.d-topbar > .d-topbar-brand { display: none; margin-right: auto; font-size: 19px; font-weight: 750; letter-spacing: -.6px; color: var(--text); align-items: center; gap: 8px; }
+.d-topbar-brand > span { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.d-sync { gap: 6px; font-size: 13px; color: var(--muted); padding: 6px 10px; border-radius: 999px; }
+.d-sync:hover:not(:disabled) { background: var(--soft); }
+.d-sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #59b873; }
+.d-sync-dot.warn { background: #d9a22b; }
+.d-sync-dot.off { background: #b9b3a5; }
+
+/* Content and page headers */
+.d-content { flex: 1; width: 100%; padding: 28px 32px 40px; max-width: 1400px; }
+.d-view-chat { padding: 0; max-width: none; }
+.d-view-day, .d-view-settings, .d-view-people, .d-view-more { max-width: 860px; }
+.d-page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.d-page-head h1 { margin: 0; font-size: 28px; letter-spacing: -.8px; text-transform: none; }
+.d-page-head h1::first-letter { text-transform: uppercase; }
+.d-page-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.d-banner { margin: 12px 20px 0; font-size: 14px; }
+
+/* "More" screen (phone) */
+.d-more-list { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.d-more-list button { display: flex; align-items: center; gap: 14px; padding: 16px 18px; font-size: 16px; text-align: left; border-bottom: 1px solid var(--line); }
+.d-more-list button:last-child { border-bottom: 0; }
+.d-more-list button > span { flex: 1; }
+.d-more-list button > svg:first-child { color: var(--accent-strong); }
+.d-more-list button > svg:last-child { color: var(--muted); }
+.d-more-account { margin: 18px 4px 0; color: var(--muted); font-size: 13px; }
+
+/* Sign-in illustration */
+.d-auth-art h1 { margin-top: 0; }
+.d-auth-chat { display: flex; flex-direction: column; gap: 10px; margin-top: 30px; max-width: 380px; }
+.d-auth-chat p { margin: 0; padding: 11px 15px; border-radius: 18px 18px 18px 6px; background: var(--surface); border: 1px solid var(--line); color: var(--text) !important; font-size: 14px !important; line-height: 1.45; align-self: flex-start; }
+.d-auth-chat p.user { align-self: flex-end; background: var(--accent-soft); border-color: transparent; border-radius: 18px 18px 6px 18px; }
+.d-auth-logo { color: var(--accent-strong); }
+
+/* Older dark-theme rules in theme.css are more specific; keep the shell on its tokens. */
+[data-theme='dark'] .d-sidebar { background: var(--sidebar); }
+[data-theme='dark'] .d-topbar { background: var(--bg); }
+[data-theme='dark'] .d-mobile-nav { background: var(--surface); }
+[data-theme='dark'] .d-sidebar nav button { color: var(--muted); }
+[data-theme='dark'] .d-sidebar nav button.active { color: var(--text); }
+
+/* Phone */
+.d-mobile-nav, .d-calendar-dots { display: none; }
+@media (max-width: 760px) {
+  :root { --topbar-h: 50px; }
+  .d-sidebar { display: none; }
+  .d-main { margin-left: 0; padding-bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom)); }
+  .d-topbar { height: var(--topbar-h); padding: 0 10px 0 14px; justify-content: space-between; }
+  .d-topbar > .d-topbar-brand { display: flex; }
+  /* Calendar on a phone: dots instead of truncated titles. */
+  .d-calendar-day > span, .d-calendar-day > small { display: none; }
+  .d-calendar-dots { display: block; font-style: normal; color: var(--accent-strong); letter-spacing: 2px; font-size: 12px; line-height: 1; padding-left: 2px; }
+  .d-sync-label { display: none; }
+  .d-content { padding: 16px 14px 24px; }
+  .d-view-chat { padding: 0; }
+  .d-page-head { margin-bottom: 14px; }
+  .d-page-head h1 { font-size: 23px; }
+  .d-page-head p { font-size: 13px; }
+  .d-page-head > .d-primary { min-height: 40px; padding: 9px 13px; font-size: 13px; }
+  .d-banner { margin: 10px 12px 0; font-size: 13px; }
+  .d-mobile-nav { display: flex; height: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom)); padding: 4px 4px env(safe-area-inset-bottom); background: var(--surface); border-top: 1px solid var(--line); justify-content: space-around; align-items: stretch; }
+  .d-mobile-nav button { flex: 1; justify-content: center; min-width: 0; padding: 4px 2px; gap: 3px; font-size: 11px; color: var(--muted); }
+  .d-mobile-nav button svg { width: 22px; height: 22px; }
+  .d-mobile-nav button.active { color: var(--accent-strong); font-weight: 600; }
+}

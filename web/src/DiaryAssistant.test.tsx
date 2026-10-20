@@ -15,9 +15,9 @@ it('saves a proposed event only after explicit confirmation and prevents another
   await user.click(screen.getByRole('button', { name: 'Отправить сообщение' }))
   await screen.findByText('Встреча завтра')
   expect(save).not.toHaveBeenCalled()
-  await user.click(screen.getByRole('button', { name: 'Подтвердить и сохранить' }))
+  await user.click(screen.getByRole('button', { name: 'Добавить' }))
   await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
-  expect(screen.queryByRole('button', { name: 'Подтвердить и сохранить' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Добавить' })).toBeNull()
 })
 
 it('keeps manual planning available when the model request fails', async () => {
@@ -37,9 +37,9 @@ it('reuses proposal identities when confirmation is retried after a sync failure
   render(<DiaryAssistant timezone="Asia/Qyzylorda" busy={false} onSave={save} />)
   await user.type(screen.getByLabelText('Сообщение помощнику'), 'Встреча')
   await user.click(screen.getByRole('button', { name: 'Отправить сообщение' }))
-  await user.click(await screen.findByRole('button', { name: 'Подтвердить и сохранить' }))
+  await user.click(await screen.findByRole('button', { name: 'Добавить' }))
   await screen.findByRole('alert')
-  await user.click(screen.getByRole('button', { name: 'Подтвердить и сохранить' }))
+  await user.click(screen.getByRole('button', { name: 'Добавить' }))
   expect(save.mock.calls[0][0][0].id).toBe(save.mock.calls[1][0][0].id)
 })
 

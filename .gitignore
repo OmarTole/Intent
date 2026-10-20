@@ -1,9 +1,4 @@
 .DS_Store
-DerivedData/
-.build/
-*.xcuserstate
-xcuserdata/
-IntentAgent.xcodeproj/
 node_modules/
 dist/
 .venv/

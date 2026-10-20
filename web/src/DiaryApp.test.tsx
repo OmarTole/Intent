@@ -10,10 +10,13 @@ import { ApiError } from './api'
 const mocks = vi.hoisted(() => ({ api: vi.fn() }))
 vi.mock('./api', async importOriginal => ({ ...await importOriginal<typeof import('./api')>(), api: mocks.api }))
 vi.mock('./push', () => ({ existingPush: vi.fn(async () => null), disablePush: vi.fn(async () => {}) }))
+const ready = () => screen.findByRole('heading', { name: 'Что нужно сделать?' })
+const open = (user: ReturnType<typeof userEvent.setup>, section: string) => user.click(screen.getAllByRole('button', { name: section })[0])
 const account = { id: 'account-1', username: 'me@example.com', expiresAt: 9999999999, admin: false }
 let server: Diary
 beforeEach(async () => {
   await persist()
+  localStorage.setItem('intent-guide-v1:account-1', 'seen')
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
   server = { ...emptyDiary(), sections: [{ id: 'work', title: 'Работа', group: 'Обязательное' }], activities: [] }
   mocks.api.mockReset().mockImplementation(async (path: string, method?: string, body?: Diary) => {
@@ -27,8 +30,8 @@ beforeEach(async () => {
 it('creates a task, saves a comment, and updates its day color', async () => {
   const user = userEvent.setup()
   render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
-  await user.click(screen.getByRole('button', { name: 'Добавить задачу' }))
+  await ready()
+  await open(user, 'Сегодня'); await user.click(screen.getAllByRole('button', { name: 'Добавить задачу' })[0])
   await user.type(screen.getByLabelText('Название задачи'), 'Подготовить отчет')
   await user.click(screen.getByRole('button', { name: /Расширенные настройки/ }))
   await user.selectOptions(screen.getByLabelText(/Выполнение за/), 'done')
@@ -38,6 +41,7 @@ it('creates a task, saves a comment, and updates its day color', async () => {
   expect(server.activities[0].comments?.[0].text).toBe('Все цифры проверены')
   expect(server.marks[0].status).toBe('done')
   expect(server.activities[0].history?.[0].text).toBe('Создана задача')
+  await open(user, 'Прогресс')
   await waitFor(() => expect(screen.getByRole('button', { name: /Работа, .*: Выполнено/ })).toBeTruthy())
 })
 
@@ -47,7 +51,8 @@ it('moves Today across midnight in the planner timezone when the app resumes', a
     vi.setSystemTime(new Date('2026-10-02T18:59:00Z'))
     server.timezone = 'Asia/Qyzylorda'
     render(<DiaryApp />)
-    await screen.findByRole('heading', { name: 'Всё начинается с дня' })
+    await ready()
+    await open(userEvent.setup(), 'Сегодня')
     const date = screen.getByLabelText('Выбранная дата') as HTMLInputElement
     await waitFor(() => expect(date.value).toBe('2026-10-02'))
     vi.setSystemTime(new Date('2026-10-02T19:01:00Z'))
@@ -64,7 +69,8 @@ it('keeps offline task edits across reload and syncs them when connection return
   mocks.api.mockRejectedValue(new TypeError('offline'))
   const user = userEvent.setup()
   const mounted = render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
+  await ready()
+  await open(user, 'Прогресс')
   await user.click(screen.getAllByRole('button', { name: 'Работа' })[0])
   await user.click(screen.getByRole('button', { name: /Рабочая задача/ }))
   await user.clear(screen.getByLabelText('Название задачи'))
@@ -73,7 +79,7 @@ it('keeps offline task edits across reload and syncs them when connection return
   await waitFor(async () => expect((await readLocal())?.dirty).toBe(true))
   mounted.unmount()
   render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
+  await ready()
   expect((await readLocal())?.data.activities[0].title).toBe('Изменено без интернета')
   mocks.api.mockImplementation(async (path: string, method?: string, body?: Diary) => {
     if (path === '/auth/me') return account
@@ -92,14 +98,14 @@ it('does not discard pending offline changes when a session expires', async () =
   render(<DiaryApp />)
   await screen.findByRole('heading', { name: 'С возвращением' })
   expect((await readLocal())?.dirty).toBe(true)
-  expect(screen.queryByRole('heading', { name: 'Всё начинается с дня' })).toBeNull()
+  expect(screen.queryByRole('heading', { name: 'Что нужно сделать?' })).toBeNull()
 })
 
 it('saves a simple task without opening or filling advanced settings', async () => {
   const user = userEvent.setup()
   render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
-  await user.click(screen.getByRole('button', { name: 'Добавить задачу' }))
+  await ready()
+  await open(user, 'Сегодня'); await user.click(screen.getAllByRole('button', { name: 'Добавить задачу' })[0])
   expect(screen.queryByLabelText('Время')).toBeNull()
   expect(screen.queryByLabelText('Длительность, минут')).toBeNull()
   expect(screen.getByRole('button', { name: /Расширенные настройки/ }).getAttribute('aria-expanded')).toBe('false')
@@ -115,7 +121,8 @@ it('saves custom group names and user-defined group and direction order', async 
   server.sections.push({ id: 'health', title: 'Здоровье', group: 'Обязательное' })
   const user = userEvent.setup()
   const app = render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
+  await ready()
+  await open(user, 'Прогресс')
   await user.click(screen.getByRole('button', { name: 'Настроить группы и порядок' }))
   await user.clear(screen.getByLabelText('Название группы 1'))
   await user.type(screen.getByLabelText('Название группы 1'), 'Важное для меня')
@@ -129,7 +136,8 @@ it('saves custom group names and user-defined group and direction order', async 
   expect(server.sections.every(s => s.group === 'Важное для меня')).toBe(true)
   app.unmount()
   render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
+  await ready()
+  await open(user, 'Прогресс')
   await user.click(screen.getByRole('button', { name: 'Настроить группы и порядок' }))
   expect((screen.getByLabelText('Название группы 1') as HTMLInputElement).value).toBe('На выбор')
   expect((screen.getByLabelText('Название группы 2') as HTMLInputElement).value).toBe('Важное для меня')
@@ -138,8 +146,8 @@ it('saves custom group names and user-defined group and direction order', async 
 it('explains missing fields instead of disabling Save and then saves a weekly task', async () => {
   const user = userEvent.setup()
   render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
-  await user.click(screen.getByRole('button', { name: 'Добавить задачу' }))
+  await ready()
+  await open(user, 'Сегодня'); await user.click(screen.getAllByRole('button', { name: 'Добавить задачу' })[0])
   const save = screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement
   expect(save.disabled).toBe(false)
   await user.click(save)
@@ -160,8 +168,8 @@ it('shows save failures inside the task dialog and keeps the draft available', a
   mocks.api.mockImplementation((path: string, method?: string, body?: Diary) => method === 'PUT' ? Promise.reject(new ApiError('Сохранение отклонено. Проверьте дату.', 422)) : implementation(path, method, body))
   const user = userEvent.setup()
   render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
-  await user.click(screen.getByRole('button', { name: 'Добавить задачу' }))
+  await ready()
+  await open(user, 'Сегодня'); await user.click(screen.getAllByRole('button', { name: 'Добавить задачу' })[0])
   await user.type(screen.getByLabelText('Название задачи'), 'Не терять черновик')
   await user.click(screen.getByRole('button', { name: 'Сохранить' }))
   await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain('Проверьте дату'))
@@ -176,8 +184,8 @@ it('shows only populated day sections and completes tasks without opening their 
   server.sections.push({ id: 'empty', title: 'Пустое направление', group: 'Обязательное' })
   const user = userEvent.setup()
   render(<DiaryApp />)
-  await screen.findByRole('heading', { name: 'Всё начинается с дня' })
-  await user.click(screen.getAllByRole('button', { name: 'Мой день' })[0])
+  await ready()
+  await open(user, 'Сегодня')
   expect(screen.getByRole('heading', { name: 'Работа' })).toBeTruthy()
   expect(screen.queryByRole('heading', { name: 'Пустое направление' })).toBeNull()
   await user.click(screen.getByRole('button', { name: 'Завершить: Отправить отчет' }))

@@ -14,5 +14,7 @@ services:
         sync: false
       - key: COOKIE_SECURE
         value: "true"
+      - key: GROQ_API_KEY
+        sync: false
       - key: OLLAMA_URL
         sync: false

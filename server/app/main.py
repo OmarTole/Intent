@@ -3,18 +3,16 @@ import asyncio
 from contextlib import suppress
 import time
 from contextlib import asynccontextmanager
-from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
 from .ai import Interpreter
 from .config import settings
-from .db import AgentMessage, Base, Event, Intent, LoginSession, User, UserMemory, engine, get_db
-from .schemas import AgentTurnRequest, CoachRequest, CreateIntent, Interpretation, Login, MemoryData, UpdateIntent
+from .db import Base, LoginSession, User, UserMemory, engine, get_db
+from .schemas import Login, MemoryData
 from .security import RateLimiter, hash_password, token_hash, verify_password
 from .accounts import AccountProfile, PhoneIdentity, normalize_identifier, register_accounts
 
@@ -86,18 +84,10 @@ def current_user(request: Request, response: Response, db: Session = Depends(get
     return user
 
 
-def serialize_intent(intent: Intent):
-    return {**intent.data, "id": intent.id, "version": intent.version,
-            "createdAt": intent.created_at, "updatedAt": intent.updated_at}
-
-
 def memory_for(user_id: str, db: Session) -> MemoryData:
+    # Memory was edited in the retired agent UI; existing rows still give the planner context.
     row = db.get(UserMemory, user_id)
     return MemoryData.model_validate(row.data if row else {})
-
-
-def serialize_message(message: AgentMessage):
-    return {"id": message.id, "role": message.role, "text": message.text, "createdAt": message.created_at}
 
 
 @app.get("/api/health")
@@ -151,125 +141,6 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
         db.execute(delete(LoginSession).where(LoginSession.token_hash == token_hash(token)))
         db.commit()
     response.delete_cookie(COOKIE, path="/api", secure=settings.cookie_secure, httponly=True, samesite="strict")
-
-
-@app.get("/api/intents")
-def list_intents(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    rows = db.scalars(select(Intent).where(Intent.user_id == user.id).order_by(Intent.created_at.desc()))
-    return [serialize_intent(row) for row in rows]
-
-
-@app.post("/api/intents", status_code=201)
-def create_intent(body: CreateIntent, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    data = body.model_dump(mode="json", exclude={"id"})
-    existing = db.get(Intent, str(body.id))
-    if existing:
-        if existing.user_id == user.id and existing.data == data:
-            return serialize_intent(existing)
-        raise HTTPException(409, "Эта цель уже сохранена. Обновите список.")
-    row = Intent(id=str(body.id), user_id=user.id, data=data)
-    db.add(row)
-    db.add(Event(user_id=user.id, intent_id=row.id, message=f"Создана цель «{body.title}»"))
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(409, "Эта цель уже сохранена. Обновите список.")
-    return serialize_intent(row)
-
-
-@app.put("/api/intents/{intent_id}")
-def update_intent(intent_id: UUID, body: UpdateIntent, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.scalar(select(Intent).where(Intent.id == str(intent_id), Intent.user_id == user.id))
-    if not row:
-        raise HTTPException(404, "Цель не найдена.")
-    data = body.model_dump(mode="json", exclude={"version"})
-    now = time.time()
-    result = db.execute(update(Intent).where(Intent.id == str(intent_id), Intent.user_id == user.id,
-                                            Intent.version == body.version)
-                        .values(data=data, version=body.version + 1, updated_at=now)
-                        .execution_options(synchronize_session=False))
-    if result.rowcount != 1:
-        db.rollback()
-        raise HTTPException(409, "Цель изменена на другом устройстве. Обновите список и повторите действие.")
-    labels = {"active": "Возобновлена", "paused": "Отложена", "completed": "Завершена", "cancelled": "Отменена"}
-    action = labels[body.status] if row.data["status"] != body.status else "Обновлена"
-    db.add(Event(user_id=user.id, intent_id=str(intent_id), message=f"{action} цель «{body.title}»"))
-    db.commit()
-    db.refresh(row)
-    return serialize_intent(row)
-
-
-@app.get("/api/events")
-def events(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    rows = db.scalars(select(Event).where(Event.user_id == user.id).order_by(Event.created_at.desc()).limit(100))
-    return [{"id": row.id, "intentId": row.intent_id, "message": row.message, "createdAt": row.created_at} for row in rows]
-
-
-@app.get("/api/memory")
-def get_memory(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    return memory_for(user.id, db)
-
-
-@app.put("/api/memory")
-def update_memory(body: MemoryData, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    row = db.get(UserMemory, user.id)
-    if row:
-        row.data = body.model_dump()
-        row.updated_at = time.time()
-    else:
-        db.add(UserMemory(user_id=user.id, data=body.model_dump()))
-    db.add(Event(user_id=user.id, intent_id="memory", message="Обновлена память персонального агента"))
-    db.commit()
-    return body
-
-
-@app.get("/api/agent/messages")
-def agent_messages(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    rows = list(db.scalars(select(AgentMessage).where(AgentMessage.user_id == user.id)
-                           .order_by(AgentMessage.created_at.desc()).limit(50)))
-    return [serialize_message(row) for row in reversed(rows)]
-
-
-@app.delete("/api/agent/messages", status_code=204)
-def clear_agent_messages(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    db.execute(delete(AgentMessage).where(AgentMessage.user_id == user.id))
-    db.commit()
-
-
-@app.post("/api/agent/respond")
-async def agent_respond(body: AgentTurnRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    limiter.check("ai:" + user.id, 6)
-    prior = list(db.scalars(select(AgentMessage).where(AgentMessage.user_id == user.id)
-                            .order_by(AgentMessage.created_at.desc()).limit(8)))
-    context = [{"role": row.role, "content": row.text} for row in reversed(prior)]
-    context.append({"role": "user", "content": body.text})
-    result = await interpreter.converse(context, memory_for(user.id, db))
-    created_at = time.time()
-    user_message = AgentMessage(user_id=user.id, role="user", text=body.text, created_at=created_at)
-    assistant_message = AgentMessage(user_id=user.id, role="assistant", text=result.message, created_at=created_at + 0.000001)
-    db.add_all([user_message, assistant_message])
-    db.commit()
-    return {"userMessage": serialize_message(user_message), "assistantMessage": serialize_message(assistant_message),
-            "response": result}
-
-
-@app.post("/api/intents/{intent_id}/coach")
-async def coach_intent(intent_id: UUID, body: CoachRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    limiter.check("ai:" + user.id, 6)
-    row = db.scalar(select(Intent).where(Intent.id == str(intent_id), Intent.user_id == user.id))
-    if not row:
-        raise HTTPException(404, "Цель не найдена.")
-    result = await interpreter.coach(serialize_intent(row), memory_for(user.id, db), body.note)
-    db.add(Event(user_id=user.id, intent_id=row.id, message=f"Агент предложил следующий шаг для цели «{row.data['title']}»"))
-    db.commit()
-    return result
-
-
-@app.post("/api/interpret")
-async def interpret(body: Interpretation, user: User = Depends(current_user)):
-    limiter.check("ai:" + user.id, 6)
-    return await interpreter.interpret(body.text)
 
 
 from .planner_api import register_planner

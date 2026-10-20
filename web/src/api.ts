@@ -10,7 +10,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
     method, credentials: 'same-origin', cache: 'no-store',
     headers: { 'Content-Type': 'application/json', 'X-Intent-Request': '1', ...(accountId ? { 'X-Intent-User': accountId } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(path === '/interpret' || path === '/agent/respond' || path === '/planner/propose' || path.endsWith('/coach') ? 145_000 : 20_000),
+    signal: AbortSignal.timeout(path === '/planner/propose' ? 145_000 : 20_000),
   })
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}))

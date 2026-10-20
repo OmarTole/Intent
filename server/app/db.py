@@ -1,7 +1,7 @@
 import time
 import uuid
 
-from sqlalchemy import JSON, Float, ForeignKey, Integer, String, create_engine
+from sqlalchemy import JSON, Float, ForeignKey, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from .config import settings
@@ -25,16 +25,7 @@ class LoginSession(Base):
     expires_at: Mapped[float] = mapped_column(Float)
 
 
-class Intent(Base):
-    __tablename__ = "intents"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    data: Mapped[dict] = mapped_column(JSON)
-    version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[float] = mapped_column(Float, default=time.time)
-    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
-
-
+# Retired tables "intents" and "agent_messages" may still exist in old databases; nothing reads them.
 class Event(Base):
     __tablename__ = "events"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -49,15 +40,6 @@ class UserMemory(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     data: Mapped[dict] = mapped_column(JSON, default=dict)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time)
-
-
-class AgentMessage(Base):
-    __tablename__ = "agent_messages"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    role: Mapped[str] = mapped_column(String(16))
-    text: Mapped[str] = mapped_column(String(2000))
-    created_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 engine = create_engine(
